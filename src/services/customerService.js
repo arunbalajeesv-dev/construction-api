@@ -1,13 +1,45 @@
 const { getCustomer, saveCustomer } = require('../data/customers');
-const { createZohoContact } = require('./zohoService');
+const { createZohoContact, updateZohoContact } = require('./zohoService');
 
 async function syncCustomer(firebaseUid, phone, name, is_business, business_name, gstin, registered_address) {
   const existing = getCustomer(firebaseUid);
   if (existing) {
-    if (name && name.trim() !== '') {
+    let hasChanges = false;
+
+    if (name && name.trim() !== '' && existing.name !== name) {
       existing.name = name;
-      saveCustomer(existing);
+      hasChanges = true;
     }
+    if (is_business !== undefined && existing.is_business !== is_business) {
+      existing.is_business = is_business;
+      hasChanges = true;
+    }
+    if (business_name && existing.business_name !== business_name) {
+      existing.business_name = business_name;
+      hasChanges = true;
+    }
+    if (gstin && existing.gstin !== gstin) {
+      existing.gstin = gstin;
+      hasChanges = true;
+    }
+    if (registered_address && !existing.registered_address) {
+      existing.registered_address = registered_address;
+      hasChanges = true;
+    }
+
+    if (hasChanges) {
+      saveCustomer(existing);
+      if (existing.zoho_contact_id) {
+        await updateZohoContact(existing.zoho_contact_id, {
+          name,
+          phone: existing.phone,
+          business_name,
+          gstin,
+          registered_address
+        });
+      }
+    }
+
     return existing;
   }
 

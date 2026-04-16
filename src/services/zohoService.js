@@ -108,6 +108,50 @@ async function updateZohoItemImage(itemId, imageUrl) {
   return response.data.item;
 }
 
+async function updateZohoContact(zohoContactId, contactData) {
+  const token = await getAccessToken();
+  const updateBody = {};
+
+  if (contactData.name || contactData.business_name) {
+    updateBody.contact_name = contactData.business_name || contactData.name;
+    updateBody.company_name = contactData.business_name || contactData.name;
+  }
+  if (contactData.name) {
+    updateBody.contact_persons = [{
+      first_name: contactData.name,
+      last_name: '',
+      mobile: contactData.phone,
+      is_primary_contact: true
+    }];
+  }
+  if (contactData.gstin) {
+    updateBody.gst_no = contactData.gstin;
+    updateBody.gst_treatment = 'business_gst';
+  }
+  if (contactData.registered_address) {
+    updateBody.place_of_contact = contactData.registered_address.state_code || 'TN';
+    updateBody.billing_address = {
+      attention: contactData.business_name || contactData.name || '',
+      address: contactData.registered_address.address_line1 || '',
+      street2: contactData.registered_address.address_line2 || '',
+      city: contactData.registered_address.city || '',
+      state: contactData.registered_address.state || '',
+      zip: contactData.registered_address.pincode || '',
+      country: 'India'
+    };
+  }
+
+  const response = await axios.put(
+    `https://www.zohoapis.in/books/v3/contacts/${zohoContactId}`,
+    updateBody,
+    {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID }
+    }
+  );
+  return response.data.contact;
+}
+
 module.exports = {
   getAccessToken,
   getZohoProducts,
@@ -115,5 +159,6 @@ module.exports = {
   getZohoItemGroups,
   getZohoItemGroupById,
   createZohoContact,
+  updateZohoContact,
   updateZohoItemImage
 };
