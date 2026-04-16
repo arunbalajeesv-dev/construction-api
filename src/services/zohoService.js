@@ -92,9 +92,35 @@ async function createZohoContact(contactData) {
     console.log('Zoho contact response:', JSON.stringify(response.data, null, 2));
     return response.data.contact;
   } catch (error) {
-    console.log('Zoho contact error:', JSON.stringify(error.response?.data, null, 2));
-    throw error;
+    const errorData = error.response?.data;
+    if (errorData?.code === 3062) {
+      console.log('Contact already exists in Zoho, searching by phone...');
+      const existing = await searchZohoContactByPhone(contactData.phone);
+      if (existing) {
+        console.log('Found existing Zoho contact:', existing.contact_id);
+        return existing;
+      }
+    }
+    console.error('createZohoContact error:', JSON.stringify(errorData, null, 2));
+    throw new Error(JSON.stringify(errorData || error.message));
   }
+}
+
+async function searchZohoContactByPhone(phone) {
+  const token = await getAccessToken();
+  const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/books/v3/contacts`, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    params: {
+      organization_id: process.env.ZOHO_ORG_ID,
+      search_text: phone,
+      contact_type: 'customer'
+    }
+  });
+  const contacts = response.data.contacts;
+  if (contacts && contacts.length > 0) {
+    return contacts[0];
+  }
+  return null;
 }
 
 async function updateZohoItemImage(itemId, imageUrl) {
@@ -109,6 +135,7 @@ async function updateZohoItemImage(itemId, imageUrl) {
 }
 
 async function updateZohoContact(zohoContactId, contactData) {
+  console.log('updateZohoContact called with:', { zohoContactId, contactData });
   const token = await getAccessToken();
   const updateBody = {};
 
@@ -141,6 +168,7 @@ async function updateZohoContact(zohoContactId, contactData) {
     };
   }
 
+  console.log('updateZohoContact body sent to Zoho:', JSON.stringify(updateBody, null, 2));
   const response = await axios.put(
     `https://www.zohoapis.in/books/v3/contacts/${zohoContactId}`,
     updateBody,
@@ -149,6 +177,7 @@ async function updateZohoContact(zohoContactId, contactData) {
       params: { organization_id: process.env.ZOHO_ORG_ID }
     }
   );
+  console.log('updateZohoContact Zoho response:', JSON.stringify(response.data, null, 2));
   return response.data.contact;
 }
 
@@ -160,5 +189,6 @@ module.exports = {
   getZohoItemGroupById,
   createZohoContact,
   updateZohoContact,
-  updateZohoItemImage
+  updateZohoItemImage,
+  searchZohoContactByPhone
 };

@@ -2,6 +2,7 @@ const { getCustomer, saveCustomer } = require('../data/customers');
 const { createZohoContact, updateZohoContact } = require('./zohoService');
 
 async function syncCustomer(firebaseUid, phone, name, is_business, business_name, gstin, registered_address) {
+  console.log('syncCustomer called with:', { firebaseUid, phone, name, is_business, business_name, gstin });
   const existing = getCustomer(firebaseUid);
   if (existing) {
     let hasChanges = false;
