@@ -59,6 +59,68 @@ async function setImage(itemId, imageUrl) {
   );
 }
 
+// ADDRESSES
+async function getAddresses(userId) {
+  const snapshot = await db.collection('addresses')
+    .where('userId', '==', userId)
+    .orderBy('createdAt', 'desc')
+    .get();
+  if (snapshot.empty) return [];
+  return snapshot.docs.map(doc => ({ addressId: doc.id, ...doc.data() }));
+}
+
+async function addAddress(userId, addressData) {
+  const addressId = 'ADDR' + Date.now();
+  const address = {
+    addressId,
+    userId,
+    ...addressData,
+    createdAt: new Date().toISOString()
+  };
+
+  // If isDefault true, unset all other defaults first
+  if (addressData.isDefault) {
+    const existing = await getAddresses(userId);
+    for (const addr of existing) {
+      if (addr.isDefault) {
+        await db.collection('addresses').doc(addr.addressId).update({ isDefault: false });
+      }
+    }
+  }
+
+  await db.collection('addresses').doc(addressId).set(address);
+  return address;
+}
+
+async function updateAddress(userId, addressId, addressData) {
+  const doc = await db.collection('addresses').doc(addressId).get();
+  if (!doc.exists || doc.data().userId !== userId) return null;
+  await db.collection('addresses').doc(addressId).update(addressData);
+  return { addressId, ...doc.data(), ...addressData };
+}
+
+async function deleteAddress(userId, addressId) {
+  const doc = await db.collection('addresses').doc(addressId).get();
+  if (!doc.exists || doc.data().userId !== userId) return false;
+  await db.collection('addresses').doc(addressId).delete();
+  return true;
+}
+
+async function setDefaultAddress(userId, addressId) {
+  // Unset all existing defaults
+  const existing = await getAddresses(userId);
+  for (const addr of existing) {
+    if (addr.isDefault) {
+      await db.collection('addresses').doc(addr.addressId).update({ isDefault: false });
+    }
+  }
+  // Set new default
+  const doc = await db.collection('addresses').doc(addressId).get();
+  if (!doc.exists || doc.data().userId !== userId) return false;
+  await db.collection('addresses').doc(addressId).update({ isDefault: true });
+  return true;
+}
+
 module.exports = {
   getCustomer,
   saveCustomer,
@@ -66,5 +128,10 @@ module.exports = {
   getCart,
   saveCart,
   getImageMap,
-  setImage
+  setImage,
+  getAddresses,
+  addAddress,
+  updateAddress,
+  deleteAddress,
+  setDefaultAddress
 };
