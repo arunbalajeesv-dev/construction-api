@@ -1,14 +1,2 @@
-const carts = {};
-
-function getCart(userId) {
-  if (!carts[userId]) {
-    carts[userId] = { items: [] };
-  }
-  return carts[userId];
-}
-
-function saveCart(userId, cart) {
-  carts[userId] = cart;
-}
-
+const { getCart, saveCart } = require('../services/firestoreService');
 module.exports = { getCart, saveCart };

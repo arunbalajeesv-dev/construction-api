@@ -1,9 +1,9 @@
-const { getCustomer, saveCustomer } = require('../data/customers');
+const { getCustomer, saveCustomer, getCustomerByPhone } = require('./firestoreService');
 const { createZohoContact, updateZohoContact } = require('./zohoService');
 
 async function syncCustomer(firebaseUid, phone, name, is_business, business_name, gstin, registered_address) {
   console.log('syncCustomer called with:', { firebaseUid, phone, name, is_business, business_name, gstin });
-  const existing = getCustomer(firebaseUid);
+  const existing = await getCustomer(firebaseUid);
   if (existing) {
     let hasChanges = false;
 
@@ -29,7 +29,7 @@ async function syncCustomer(firebaseUid, phone, name, is_business, business_name
     }
 
     if (hasChanges) {
-      saveCustomer(existing);
+      await saveCustomer(existing);
       if (existing.zoho_contact_id) {
         await updateZohoContact(existing.zoho_contact_id, {
           name,
@@ -46,7 +46,7 @@ async function syncCustomer(firebaseUid, phone, name, is_business, business_name
 
   const zohoContact = await createZohoContact({ phone, name, is_business, business_name, gstin, registered_address });
 
-  return saveCustomer({
+  return await saveCustomer({
     userId: firebaseUid,
     phone,
     name: name || '',

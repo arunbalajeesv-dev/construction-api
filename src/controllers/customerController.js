@@ -1,28 +1,28 @@
-const { getCustomer, saveCustomer, getAllCustomers } = require('../data/customers');
+const { getCustomer, saveCustomer, getCustomerByPhone } = require('../services/firestoreService');
 
-function getCustomerHandler(req, res) {
-  const customer = getCustomer(req.params.userId);
+async function getCustomerHandler(req, res) {
+  const customer = await getCustomer(req.params.userId);
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
   res.json({ success: true, user: customer });
 }
 
-function updateDeliveryAddress(req, res) {
-  const customer = getCustomer(req.params.userId);
+async function updateDeliveryAddress(req, res) {
+  const customer = await getCustomer(req.params.userId);
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
 
   const { lat, lng, address_line1, address_line2, city, state, pincode, label } = req.body;
   customer.delivery_address = { lat, lng, address_line1, address_line2, city, state, pincode, label };
-  saveCustomer(customer);
+  await saveCustomer(customer);
 
   res.json({ success: true, user: customer });
 }
 
-function updateRegisteredAddress(req, res) {
-  const customer = getCustomer(req.params.userId);
+async function updateRegisteredAddress(req, res) {
+  const customer = await getCustomer(req.params.userId);
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
@@ -33,21 +33,21 @@ function updateRegisteredAddress(req, res) {
 
   const { address_line1, address_line2, city, state, state_code, pincode } = req.body;
   customer.registered_address = { address_line1, address_line2, city, state, state_code, pincode };
-  saveCustomer(customer);
+  await saveCustomer(customer);
 
   res.json({ success: true, user: customer });
 }
 
-function listCustomers(req, res) {
-  res.json({ success: true, users: getAllCustomers() });
+async function listCustomers(req, res) {
+  res.status(501).json({ success: false, message: 'List all customers not supported with Firestore yet' });
 }
 
-function getCustomerByPhone(req, res) {
-  const customer = getAllCustomers().find(c => c.phone === req.params.phone);
+async function getCustomerByPhoneHandler(req, res) {
+  const customer = await getCustomerByPhone(req.params.phone);
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
   res.json({ success: true, user: customer });
 }
 
-module.exports = { getCustomer: getCustomerHandler, updateDeliveryAddress, updateRegisteredAddress, listCustomers, getCustomerByPhone };
+module.exports = { getCustomer: getCustomerHandler, updateDeliveryAddress, updateRegisteredAddress, listCustomers, getCustomerByPhone: getCustomerByPhoneHandler };

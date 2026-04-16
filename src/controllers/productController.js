@@ -1,5 +1,6 @@
 const { getAllProducts, getProductById } = require('../services/productService');
 const zohoService = require('../services/zohoService');
+const { setImage } = require('../services/firestoreService');
 
 const getProducts = async (req, res) => {
   try {
@@ -31,6 +32,7 @@ const updateProductImage = async (req, res) => {
   const image_url = (!raw || raw.includes('placehold.co')) ? PLACEHOLDER_IMAGE : raw;
   try {
     await zohoService.updateZohoItemImage(id, image_url);
+    await setImage(id, image_url);
     res.json({ success: true, message: 'Image updated successfully' });
   } catch (err) {
     // Error code 2006 means item not found — likely a group_id
@@ -38,6 +40,7 @@ const updateProductImage = async (req, res) => {
       try {
         const group = await zohoService.getZohoItemGroupById(id);
         await Promise.all(group.items.map(item => zohoService.updateZohoItemImage(item.item_id, image_url)));
+        await setImage(id, image_url);
         return res.json({ success: true, message: 'Image updated successfully for all variants' });
       } catch (groupErr) {
         return res.status(500).json({ success: false, message: groupErr.message });

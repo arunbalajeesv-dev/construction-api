@@ -3,7 +3,7 @@ const { getProductById } = require('./productService');
 const { calculateItemPrice } = require('../utils/gstCalculator');
 
 async function addToCart(userId, productId, quantity) {
-  const cart = getCart(userId);
+  const cart = await getCart(userId);
 
   const existingItem = cart.items.find(i => i.productId === productId);
   if (existingItem) {
@@ -12,12 +12,12 @@ async function addToCart(userId, productId, quantity) {
     cart.items.push({ productId, quantity });
   }
 
-  saveCart(userId, cart);
+  await saveCart(userId, cart);
   return await buildCartResponse(userId);
 }
 
 async function updateCartItem(userId, productId, quantity) {
-  const cart = getCart(userId);
+  const cart = await getCart(userId);
 
   if (quantity <= 0) {
     cart.items = cart.items.filter(i => i.productId !== productId);
@@ -27,19 +27,19 @@ async function updateCartItem(userId, productId, quantity) {
     item.quantity = quantity;
   }
 
-  saveCart(userId, cart);
+  await saveCart(userId, cart);
   return await buildCartResponse(userId);
 }
 
 async function removeFromCart(userId, productId) {
-  const cart = getCart(userId);
+  const cart = await getCart(userId);
   cart.items = cart.items.filter(i => i.productId !== productId);
-  saveCart(userId, cart);
+  await saveCart(userId, cart);
   return await buildCartResponse(userId);
 }
 
 async function buildCartResponse(userId) {
-  const cart = getCart(userId);
+  const cart = await getCart(userId);
 
   let grandTotal = 0;
   let totalGST = 0;

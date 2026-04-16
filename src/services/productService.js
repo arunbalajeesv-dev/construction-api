@@ -2,6 +2,7 @@ const {
   getZohoProducts,
   getZohoItemGroups
 } = require('./zohoService');
+const { getImageMap } = require('./firestoreService');
 
 // Extract GST from Zoho item tax preferences
 const extractGST = (item) => {
@@ -21,6 +22,7 @@ const buildImage = (name, imageUrl) =>
 const cache = {
   products: null,
   groups: null,
+  imageMap: null,
   lastFetched: null,
   TTL: 10 * 60 * 1000 // 10 minutes
 };
@@ -37,8 +39,22 @@ async function fetchZohoData() {
     getZohoProducts(),
     getZohoItemGroups()
   ]);
+
+  // Build imageMap from Zoho items (custom_field_hash if available)
+  const imageMap = {};
+  items.forEach(item => {
+    if (item.custom_field_hash?.cf_image_url) {
+      imageMap[item.item_id] = item.custom_field_hash.cf_image_url;
+    }
+  });
+
+  // Merge with Firestore imageMap (Firestore values take precedence)
+  const firestoreImages = await getImageMap();
+  const mergedImageMap = { ...imageMap, ...firestoreImages };
+
   cache.products = items;
   cache.groups = groups;
+  cache.imageMap = mergedImageMap;
   cache.lastFetched = Date.now();
   return { items, groups };
 }
@@ -46,6 +62,7 @@ async function fetchZohoData() {
 function clearCache() {
   cache.products = null;
   cache.groups = null;
+  cache.imageMap = null;
   cache.lastFetched = null;
 }
 
@@ -90,7 +107,7 @@ const getAllProducts = async (category) => {
       variants,
       gst_percentage: firstVariantItem ? extractGST(firstVariantItem) : 0,
       hsn: firstVariantItem?.hsn_or_sac || '',
-      image: firstVariantItem?.custom_field_hash?.cf_image_url || buildImage(group.group_name),
+      image: cache.imageMap[group.group_id] || cache.imageMap[group.items[0]?.item_id] || buildImage(group.group_name),
       fallbackImage: buildImage(group.group_name)
     };
   });
@@ -109,7 +126,7 @@ const getAllProducts = async (category) => {
       price: item.rate,
       gst_percentage: extractGST(item),
       hsn: item.hsn_or_sac || '',
-      image: item.custom_field_hash?.cf_image_url || buildImage(item.name),
+      image: cache.imageMap[item.item_id] || buildImage(item.name),
       fallbackImage: buildImage(item.name)
     }));
 
@@ -152,7 +169,7 @@ const getProductById = async (id) => {
       variants,
       gst_percentage: firstVariantItem ? extractGST(firstVariantItem) : 0,
       hsn: firstVariantItem?.hsn_or_sac || '',
-      image: firstVariantItem?.custom_field_hash?.cf_image_url || buildImage(group.group_name),
+      image: cache.imageMap[group.group_id] || cache.imageMap[group.items[0]?.item_id] || buildImage(group.group_name),
       fallbackImage: buildImage(group.group_name)
     };
   }
@@ -173,7 +190,7 @@ const getProductById = async (id) => {
         price: variant.rate,
         gst_percentage: fullItem ? extractGST(fullItem) : 0,
         hsn: fullItem?.hsn_or_sac || '',
-        image: fullItem?.custom_field_hash?.cf_image_url || buildImage(group.group_name),
+        image: cache.imageMap[id] || buildImage(group.group_name),
         fallbackImage: buildImage(group.group_name)
       };
     }
@@ -193,7 +210,7 @@ const getProductById = async (id) => {
     price: item.rate,
     gst_percentage: extractGST(item),
     hsn: item.hsn_or_sac || '',
-    image: item.custom_field_hash?.cf_image_url || buildImage(item.name),
+    image: cache.imageMap[item.item_id] || buildImage(item.name),
     fallbackImage: buildImage(item.name)
   };
 };
