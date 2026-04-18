@@ -3,54 +3,55 @@ const { updateDeliveryConfig, getDeliveryConfig, getAddressById } = require('../
 
 const calculateDeliveryCharge = async (req, res) => {
   try {
-    let { pincode, latitude, longitude, orderValue, addressId } = req.body;
+    const { userId, addressId } = req.body;
+    if (!userId) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'userId is required' });
+    if (!addressId) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'addressId is required' });
 
-    // Support address lookup by addressId
-    if (addressId) {
-      const address = await getAddressById(addressId);
-      if (!address) return res.status(404).json({ success: false, message: 'Address not found' });
-      pincode = pincode || address.pincode;
-      latitude = latitude ?? address.latitude;
-      longitude = longitude ?? address.longitude;
-
-      const addressString = [address.streetAddress, address.city, address.state, address.pincode]
-        .filter(Boolean).join(', ');
-
-      const result = await calculateDelivery(
-        pincode,
-        parseFloat(latitude),
-        parseFloat(longitude),
-        parseFloat(orderValue) || 0,
-        addressString
-      );
-      return res.json({ success: true, data: result });
+    const address = await getAddressById(addressId);
+    if (!address || address.userId !== userId) {
+      return res.status(404).json({ success: false, error: 'ADDRESS_NOT_FOUND', message: 'Address not found' });
     }
 
-    // Legacy: direct coords
-    if (!pincode) return res.status(400).json({ success: false, message: 'pincode is required' });
-    if (latitude === undefined || latitude === null) return res.status(400).json({ success: false, message: 'latitude is required' });
-    if (longitude === undefined || longitude === null) return res.status(400).json({ success: false, message: 'longitude is required' });
-    if (isNaN(latitude)) return res.status(400).json({ success: false, message: 'latitude must be a number' });
-    if (isNaN(longitude)) return res.status(400).json({ success: false, message: 'longitude must be a number' });
+    const addressString = [address.streetAddress, address.city, address.state, address.pincode]
+      .filter(Boolean).join(', ');
 
     const result = await calculateDelivery(
-      pincode,
-      parseFloat(latitude),
-      parseFloat(longitude),
-      parseFloat(orderValue) || 0
+      address.pincode,
+      parseFloat(address.latitude),
+      parseFloat(address.longitude),
+      0,
+      addressString
     );
-    res.json({ success: true, data: result });
+
+    if (!result.serviceable) {
+      return res.status(400).json({
+        success: false,
+        error: 'NOT_SERVICEABLE',
+        message: 'Sorry, we do not deliver to this area.'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        deliveryCharge: result.delivery_charge,
+        distanceKm: result.one_way_km,
+        distanceText: result.distance_text,
+        serviceable: true,
+        distanceSource: result.distance_source
+      }
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
 const getConfig = async (req, res) => {
   try {
     const config = await getDeliveryConfig();
-    res.json({ success: true, data: config });
+    res.json({ success: true, data: { config } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -62,9 +63,9 @@ const updateConfig = async (req, res) => {
       freeDeliveryThreshold: freeDeliveryThreshold || null,
       freeDeliveryPincodes: freeDeliveryPincodes || []
     });
-    res.json({ success: true, message: 'Delivery config updated', data: config });
+    res.json({ success: true, message: 'Delivery config updated', data: { config } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 

@@ -11,7 +11,7 @@ const homeRoutes = require('./src/routes/home');
 const authRoutes = require('./src/routes/auth');
 const customerRoutes = require('./src/routes/customers');
 const uploadRoutes = require('./src/routes/upload');
-const addressRoutes = require('./src/routes/address');
+const addressRoutes = require('./src/routes/address'); // mounted at /api/addresses
 const deliveryRoutes = require('./src/routes/delivery');
 const orderRoutes = require('./src/routes/orders');
 const configRoutes = require('./src/routes/config');
@@ -41,7 +41,7 @@ app.use('/api/home', homeRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/upload', uploadRoutes);
-app.use('/api/address', addressRoutes);
+app.use('/api/addresses', addressRoutes);
 app.use('/api/delivery', deliveryRoutes);
 app.use('/api/orders', orderRoutes);
 app.use('/api/config', configRoutes);

@@ -5,6 +5,7 @@ const {
   getDrivers, addDriver, softDeleteDriver, getDriverById
 } = require('../services/firestoreService');
 const { createZohoSalesOrder, confirmZohoSalesOrder, createZohoInvoiceFromSO } = require('../services/zohoOrderService');
+const { formatTimestamps } = require('../utils/formatDoc');
 
 // GET /api/admin/orders
 const listOrders = async (req, res) => {
@@ -12,25 +13,20 @@ const listOrders = async (req, res) => {
     const { status, date } = req.query;
     let orders = await getAllOrders();
 
-    if (status) {
-      orders = orders.filter(o => o.status === status);
-    }
-    if (date) {
-      orders = orders.filter(o => o.createdAt && o.createdAt.startsWith(date));
-    }
+    if (status) orders = orders.filter(o => o.status === status);
+    if (date) orders = orders.filter(o => o.createdAt && o.createdAt.startsWith(date));
 
-    // Join customer details
     const enriched = await Promise.all(orders.map(async (order) => {
       const customer = await getCustomer(order.userId).catch(() => null);
       return {
-        ...order,
+        ...formatTimestamps(order),
         customer: customer ? { name: customer.name, phone: customer.phone } : null
       };
     }));
 
-    res.json({ success: true, count: enriched.length, orders: enriched });
+    res.json({ success: true, data: { count: enriched.length, orders: enriched } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -42,9 +38,9 @@ const getNewOrderCount = async (req, res) => {
     const newOrders = orders.filter(o =>
       o.status === 'warehouse_review' && o.createdAt > fiveMinutesAgo
     );
-    res.json({ success: true, count: newOrders.length, orders: newOrders });
+    res.json({ success: true, data: { count: newOrders.length, orders: newOrders } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -53,7 +49,7 @@ const getOrderDetail = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
 
     const [customer, address] = await Promise.all([
       getCustomer(order.userId).catch(() => null),
@@ -62,14 +58,16 @@ const getOrderDetail = async (req, res) => {
 
     res.json({
       success: true,
-      order: {
-        ...order,
-        customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email || null } : null,
-        deliveryAddress: address || null
+      data: {
+        order: {
+          ...formatTimestamps(order),
+          customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email || null } : null,
+          deliveryAddress: address || null
+        }
       }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -78,9 +76,9 @@ const acceptOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.status !== 'warehouse_review') {
-      return res.status(400).json({ success: false, message: `Order is already ${order.status}` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order is already ${order.status}` });
     }
 
     const [customer, address] = await Promise.all([
@@ -89,10 +87,9 @@ const acceptOrder = async (req, res) => {
     ]);
 
     if (!customer || !customer.zoho_contact_id) {
-      return res.status(400).json({ success: false, message: 'Customer Zoho account not found' });
+      return res.status(400).json({ success: false, error: 'CUSTOMER_NOT_FOUND', message: 'Customer Zoho account not found' });
     }
 
-    // 1. Create Zoho Sales Order
     const zohoSO = await createZohoSalesOrder(
       customer.zoho_contact_id,
       order.items,
@@ -101,7 +98,6 @@ const acceptOrder = async (req, res) => {
       customer.phone || null
     );
 
-    // 2. Confirm the SO (draft → confirmed)
     try {
       const confirmResult = await confirmZohoSalesOrder(zohoSO.salesorder_id);
       if (confirmResult.code !== 0) {
@@ -111,7 +107,6 @@ const acceptOrder = async (req, res) => {
       console.error('SO confirm failed (non-fatal):', confirmErr.response?.data || confirmErr.message);
     }
 
-    // 3. Create invoice from confirmed SO
     let zohoInvoice = null;
     try {
       zohoInvoice = await createZohoInvoiceFromSO(zohoSO.salesorder_id);
@@ -119,7 +114,6 @@ const acceptOrder = async (req, res) => {
       console.error('Invoice creation failed (non-fatal):', invoiceErr.response?.data || invoiceErr.message);
     }
 
-    // 4. Generate delivery OTP
     const deliveryOtp = String(Math.floor(1000 + Math.random() * 9000));
 
     const updated = await updateOrder(orderId, {
@@ -132,10 +126,10 @@ const acceptOrder = async (req, res) => {
       acceptedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
     console.error('acceptOrder error:', err.response?.data || err.message);
-    res.status(500).json({ success: false, message: err.response?.data?.message || err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.response?.data?.message || err.message });
   }
 };
 
@@ -144,9 +138,9 @@ const declineOrder = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.status !== 'warehouse_review') {
-      return res.status(400).json({ success: false, message: `Order is already ${order.status}` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order is already ${order.status}` });
     }
 
     const updated = await updateOrder(orderId, {
@@ -154,9 +148,9 @@ const declineOrder = async (req, res) => {
       declinedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -165,9 +159,9 @@ const markPacked = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.status !== 'accepted') {
-      return res.status(400).json({ success: false, message: `Order must be accepted before packing (current: ${order.status})` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order must be accepted before packing (current: ${order.status})` });
     }
 
     const updated = await updateOrder(orderId, {
@@ -175,9 +169,9 @@ const markPacked = async (req, res) => {
       packedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -187,21 +181,21 @@ const assignVehicle = async (req, res) => {
     const { orderId } = req.params;
     const { vehicleId, driverId } = req.body;
 
-    if (!vehicleId) return res.status(400).json({ success: false, message: 'vehicleId is required' });
-    if (!driverId) return res.status(400).json({ success: false, message: 'driverId is required' });
+    if (!vehicleId) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'vehicleId is required' });
+    if (!driverId) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'driverId is required' });
 
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.status !== 'ready_for_dispatch') {
-      return res.status(400).json({ success: false, message: `Order must be ready_for_dispatch (current: ${order.status})` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order must be ready_for_dispatch (current: ${order.status})` });
     }
 
     const [vehicle, driver] = await Promise.all([
       getVehicleById(vehicleId),
       getDriverById(driverId)
     ]);
-    if (!vehicle) return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    if (!driver) return res.status(404).json({ success: false, message: 'Driver not found' });
+    if (!vehicle) return res.status(404).json({ success: false, error: 'VEHICLE_NOT_FOUND', message: 'Vehicle not found' });
+    if (!driver) return res.status(404).json({ success: false, error: 'DRIVER_NOT_FOUND', message: 'Driver not found' });
 
     const { updateVehicle, updateDriver } = require('../services/firestoreService');
     await Promise.all([
@@ -220,9 +214,9 @@ const assignVehicle = async (req, res) => {
       assignedAt: new Date().toISOString()
     });
 
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -231,7 +225,7 @@ const getPickingList = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
 
     const [customer, address] = await Promise.all([
       getCustomer(order.userId).catch(() => null),
@@ -255,15 +249,17 @@ const getPickingList = async (req, res) => {
 
     res.json({
       success: true,
-      orderId,
-      customerName: customer?.name || null,
-      zoho_so_number: order.zoho_so_number || null,
-      items,
-      deliveryAddress,
-      grandTotal: order.grand_total
+      data: {
+        orderId,
+        customerName: customer?.name || null,
+        zoho_so_number: order.zoho_so_number || null,
+        items,
+        deliveryAddress,
+        grandTotal: Number(order.grand_total ?? 0)
+      }
     });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -276,9 +272,9 @@ const getPendingCOD = async (req, res) => {
       o.codCollected !== true &&
       o.status === 'delivered'
     );
-    res.json({ success: true, count: pending.length, orders: pending });
+    res.json({ success: true, data: { count: pending.length, orders: pending.map(formatTimestamps) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -289,16 +285,16 @@ const reconcileCOD = async (req, res) => {
     const { amountReceived, reconciledBy } = req.body;
 
     if (amountReceived === undefined || amountReceived === null) {
-      return res.status(400).json({ success: false, message: 'amountReceived is required' });
+      return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'amountReceived is required' });
     }
 
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.paymentType !== 'COD') {
-      return res.status(400).json({ success: false, message: 'Order is not a COD order' });
+      return res.status(400).json({ success: false, error: 'INVALID_PAYMENT_TYPE', message: 'Order is not a COD order' });
     }
     if (order.codCollected) {
-      return res.status(400).json({ success: false, message: 'COD already reconciled' });
+      return res.status(400).json({ success: false, error: 'ALREADY_RECONCILED', message: 'COD already reconciled' });
     }
 
     const updated = await updateOrder(orderId, {
@@ -308,9 +304,9 @@ const reconcileCOD = async (req, res) => {
       reconciledBy: reconciledBy || null
     });
 
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -318,9 +314,9 @@ const reconcileCOD = async (req, res) => {
 const listVehicles = async (req, res) => {
   try {
     const vehicles = await getVehicles();
-    res.json({ success: true, vehicles });
+    res.json({ success: true, data: { vehicles } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -328,11 +324,11 @@ const listVehicles = async (req, res) => {
 const createVehicle = async (req, res) => {
   try {
     const { name } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'name is required' });
+    if (!name) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'name is required' });
     const vehicle = await addVehicle(name.trim());
-    res.json({ success: true, vehicle });
+    res.json({ success: true, data: { vehicle } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -341,9 +337,9 @@ const removeVehicle = async (req, res) => {
   try {
     const { vehicleId } = req.params;
     await deleteVehicle(vehicleId);
-    res.json({ success: true });
+    res.json({ success: true, message: 'Vehicle deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -351,9 +347,9 @@ const removeVehicle = async (req, res) => {
 const listDrivers = async (req, res) => {
   try {
     const drivers = await getDrivers();
-    res.json({ success: true, drivers });
+    res.json({ success: true, data: { drivers } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -361,12 +357,12 @@ const listDrivers = async (req, res) => {
 const createDriver = async (req, res) => {
   try {
     const { name, phone } = req.body;
-    if (!name) return res.status(400).json({ success: false, message: 'name is required' });
-    if (!phone) return res.status(400).json({ success: false, message: 'phone is required' });
+    if (!name) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'name is required' });
+    if (!phone) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'phone is required' });
     const driver = await addDriver(name.trim(), phone.trim());
-    res.json({ success: true, driver });
+    res.json({ success: true, data: { driver } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -375,9 +371,9 @@ const removeDriver = async (req, res) => {
   try {
     const { driverId } = req.params;
     await softDeleteDriver(driverId);
-    res.json({ success: true });
+    res.json({ success: true, message: 'Driver deleted' });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 

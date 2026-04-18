@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { addAddressHandler, getAddressesHandler, updateAddressHandler, deleteAddressHandler, setDefaultAddressHandler } = require('../controllers/addressController');
 
-router.post('/add', addAddressHandler);
 router.get('/:userId', getAddressesHandler);
-router.put('/update', updateAddressHandler);
-router.delete('/remove', deleteAddressHandler);
-router.put('/default', setDefaultAddressHandler);
+router.post('/:userId', addAddressHandler);
+router.put('/:userId/:addressId', updateAddressHandler);
+router.delete('/:userId/:addressId', deleteAddressHandler);
+router.put('/:userId/:addressId/default', setDefaultAddressHandler);
 
 module.exports = router;

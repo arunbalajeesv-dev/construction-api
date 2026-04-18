@@ -1,9 +1,9 @@
 const multer = require('multer');
-const axios = require('axios');
 const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver } = require('../services/firestoreService');
 const { getETA } = require('../services/googleMapsService');
 const { uploadImage } = require('../services/cloudinaryService');
 const { updateZohoShipment } = require('../services/zohoOrderService');
+const { formatTimestamps } = require('../utils/formatDoc');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -12,17 +12,17 @@ const loadingComplete = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.status !== 'loading') {
-      return res.status(400).json({ success: false, message: `Order must be in loading status (current: ${order.status})` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order must be in loading status (current: ${order.status})` });
     }
     const updated = await updateOrder(orderId, {
       status: 'out_for_delivery',
       loadingCompleteAt: new Date().toISOString()
     });
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -31,22 +31,22 @@ const getEta = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
 
     const address = await getAddressById(order.addressId);
-    if (!address) return res.status(404).json({ success: false, message: 'Delivery address not found' });
+    if (!address) return res.status(404).json({ success: false, error: 'ADDRESS_NOT_FOUND', message: 'Delivery address not found' });
 
     if (!process.env.GOOGLE_MAPS_API_KEY) {
-      return res.status(503).json({ success: false, message: 'Google Maps API key not configured' });
+      return res.status(503).json({ success: false, error: 'SERVICE_UNAVAILABLE', message: 'Google Maps API key not configured' });
     }
 
     const addressString = [address.streetAddress, address.city, address.state, address.pincode]
       .filter(Boolean).join(', ');
 
     const eta = await getETA(addressString);
-    res.json({ success: true, ...eta });
+    res.json({ success: true, data: eta });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -55,17 +55,17 @@ const arrived = async (req, res) => {
   try {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.status !== 'out_for_delivery') {
-      return res.status(400).json({ success: false, message: `Order must be out_for_delivery (current: ${order.status})` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order must be out_for_delivery (current: ${order.status})` });
     }
     const updated = await updateOrder(orderId, {
       status: 'arrived',
       arrivedAt: new Date().toISOString()
     });
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -75,24 +75,24 @@ const codCollected = async (req, res) => {
     const { orderId } = req.params;
     const { amount } = req.body;
     const order = await getOrderById(orderId);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
     if (order.paymentType !== 'COD') {
-      return res.status(400).json({ success: false, message: 'Order is not a COD order' });
+      return res.status(400).json({ success: false, error: 'NOT_COD_ORDER', message: 'Order is not a COD order' });
     }
     if (order.status !== 'arrived') {
-      return res.status(400).json({ success: false, message: `Order must be in arrived status (current: ${order.status})` });
+      return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order must be in arrived status (current: ${order.status})` });
     }
     if (amount === undefined || amount === null) {
-      return res.status(400).json({ success: false, message: 'amount is required' });
+      return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'amount is required' });
     }
     const updated = await updateOrder(orderId, {
       codCollectedByDriver: true,
       codAmountCollected: parseFloat(amount),
       codCollectedAt: new Date().toISOString()
     });
-    res.json({ success: true, order: updated });
+    res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    res.status(500).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
 };
 
@@ -105,21 +105,21 @@ const completeDelivery = [
       const { otp } = req.body;
 
       const order = await getOrderById(orderId);
-      if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+      if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
       if (order.status !== 'arrived') {
-        return res.status(400).json({ success: false, message: `Order must be in arrived status (current: ${order.status})` });
+        return res.status(400).json({ success: false, error: 'INVALID_STATUS', message: `Order must be in arrived status (current: ${order.status})` });
       }
 
       if (order.paymentType === 'COD' && !order.codCollectedByDriver) {
-        return res.status(400).json({ success: false, error: 'COD payment must be collected before completing delivery' });
+        return res.status(400).json({ success: false, error: 'COD_NOT_COLLECTED', message: 'COD payment must be collected before completing delivery' });
       }
 
-      if (!otp) return res.status(400).json({ success: false, message: 'otp is required' });
+      if (!otp) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'otp is required' });
       if (String(otp) !== String(order.deliveryOtp)) {
-        return res.status(400).json({ success: false, error: 'Invalid OTP' });
+        return res.status(400).json({ success: false, error: 'INVALID_OTP', message: 'Invalid OTP' });
       }
 
-      if (!req.file) return res.status(400).json({ success: false, message: 'photo is required' });
+      if (!req.file) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'photo is required' });
       const base64 = req.file.buffer.toString('base64');
       const dataUri = `data:${req.file.mimetype};base64,${base64}`;
       const deliveryPhotoUrl = await uploadImage(dataUri);
@@ -137,13 +137,12 @@ const completeDelivery = [
         });
       }
 
-      // Free up vehicle and driver
       if (order.vehicleId) updateVehicle(order.vehicleId, { isAvailable: true }).catch(() => {});
       if (order.driverId) updateDriver(order.driverId, { isAvailable: true }).catch(() => {});
 
-      res.json({ success: true, order: updated });
+      res.json({ success: true, data: { order: formatTimestamps(updated) } });
     } catch (err) {
-      res.status(500).json({ success: false, message: err.message });
+      res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
     }
   }
 ];

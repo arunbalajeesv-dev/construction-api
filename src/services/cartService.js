@@ -1,6 +1,5 @@
 const { getCart, saveCart } = require('../data/cart');
 const { getProductById } = require('./productService');
-const { calculateItemPrice } = require('../utils/gstCalculator');
 
 async function addToCart(userId, productId, quantity) {
   const cart = await getCart(userId);
@@ -42,10 +41,9 @@ async function updateCartItem(userId, productId, quantity) {
     if (!product) throw new Error('Product not found');
 
     if (product.available_stock !== undefined && product.available_stock !== null) {
-      const existingItem = cart.items.find(i => i.productId === productId);
-      const existingQty = existingItem ? existingItem.quantity : 0;
-
       if (quantity > product.available_stock) {
+        const existingItem = cart.items.find(i => i.productId === productId);
+        const existingQty = existingItem ? existingItem.quantity : 0;
         const availableToAdd = product.available_stock - existingQty;
         throw new Error(
           availableToAdd <= 0
@@ -80,14 +78,14 @@ async function setDeliveryCharge(userId, deliveryCharge, addressId) {
   cart.deliveryCharge = deliveryCharge;
   cart.deliveryAddressId = addressId || null;
   await saveCart(userId, cart);
-  return { deliveryCharge, deliveryAddressId: cart.deliveryAddressId };
+  return await buildCartResponse(userId);
 }
 
 async function buildCartResponse(userId) {
   const cart = await getCart(userId);
 
-  let grandTotal = 0;
-  let totalGST = 0;
+  let subtotalRaw = 0;
+  let gstTotalRaw = 0;
 
   const items = await Promise.all(cart.items.map(async (item) => {
     const product = await getProductById(item.productId);
@@ -95,38 +93,35 @@ async function buildCartResponse(userId) {
 
     const totalWithoutGST = parseFloat((product.price * item.quantity).toFixed(2));
     const gstAmount = parseFloat((totalWithoutGST * product.gst_percentage / 100).toFixed(2));
-    const itemGrandTotal = parseFloat((totalWithoutGST + gstAmount).toFixed(2));
+    const itemTotal = parseFloat((totalWithoutGST + gstAmount).toFixed(2));
 
-    grandTotal += itemGrandTotal;
-    totalGST += gstAmount;
+    subtotalRaw += totalWithoutGST;
+    gstTotalRaw += gstAmount;
 
     return {
       productId: item.productId,
-      name: product.name,
+      productName: product.name,
       quantity: item.quantity,
-      unit: product.unit,
-      unitPrice: product.price,
-      totalWithoutGST,
-      gstRate: product.gst_percentage,
-      gstAmount,
-      grandTotal: itemGrandTotal
+      unitPrice: Number(product.price),
+      gstRate: Number(product.gst_percentage),
+      itemTotal
     };
   }));
 
   const validItems = items.filter(Boolean);
-  const totalWithoutGST = parseFloat(validItems.reduce((sum, i) => sum + i.totalWithoutGST, 0).toFixed(2));
-  const deliveryCharge = cart.deliveryCharge || 0;
+  const subtotal = parseFloat(subtotalRaw.toFixed(2));
+  const gstTotal = parseFloat(gstTotalRaw.toFixed(2));
+  const deliveryCharge = Number(cart.deliveryCharge || 0);
+  const grandTotal = parseFloat((subtotal + gstTotal + deliveryCharge).toFixed(2));
 
   return {
-    userId,
-    items: validItems,
-    deliveryCharge,
-    deliveryAddressId: cart.deliveryAddressId || null,
-    summary: {
-      totalItems: validItems.reduce((sum, i) => sum + i.quantity, 0),
-      totalWithoutGST,
-      totalGST: parseFloat(totalGST.toFixed(2)),
-      grandTotal: parseFloat((grandTotal + deliveryCharge).toFixed(2))
+    cart: {
+      userId,
+      items: validItems,
+      subtotal,
+      gstTotal,
+      deliveryCharge,
+      grandTotal
     }
   };
 }
