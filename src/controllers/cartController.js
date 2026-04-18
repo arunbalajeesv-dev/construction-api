@@ -35,7 +35,8 @@ async function addToCart(req, res) {
     const result = await cartService.addToCart(userId, productId, parseInt(quantity));
     res.json({ success: true, data: result });
   } catch (err) {
-    res.status(400).json({ success: false, error: 'BAD_REQUEST', message: err.message });
+    const isStockError = /out of stock|units available/i.test(err.message);
+    res.status(400).json({ success: false, error: isStockError ? 'STOCK_ISSUE' : 'BAD_REQUEST', message: err.message });
   }
 }
 

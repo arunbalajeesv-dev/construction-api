@@ -56,11 +56,16 @@ const getOrderDetail = async (req, res) => {
       getAddressById(order.addressId).catch(() => null)
     ]);
 
+    const o = formatTimestamps(order);
     res.json({
       success: true,
       data: {
         order: {
-          ...formatTimestamps(order),
+          ...o,
+          subtotal: Number(o.subtotal ?? 0),
+          gstTotal: Number(o.gst_total ?? 0),
+          deliveryCharge: Number(o.delivery_charge ?? o.deliveryCharge ?? 0),
+          grandTotal: Number(o.grand_total ?? o.grandTotal ?? 0),
           customer: customer ? { name: customer.name, phone: customer.phone, email: customer.email || null } : null,
           deliveryAddress: address || null
         }

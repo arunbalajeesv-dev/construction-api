@@ -18,8 +18,7 @@ async function createZohoSalesOrder(zohoContactId, lineItems, shippingAddress, d
       city: (shippingAddress.city || '').substring(0, 50),
       state: (shippingAddress.state || '').substring(0, 50),
       zip: shippingAddress.pincode || '',
-      country: 'India',
-      phone: phone || ''
+      country: 'India'
     },
     notes: `Suppliable B2B Order${phone ? ` | Phone: ${phone}` : ''}`
   };
