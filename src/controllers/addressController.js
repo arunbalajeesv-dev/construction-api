@@ -1,23 +1,46 @@
+const axios = require('axios');
 const { getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress } = require('../services/firestoreService');
+
+async function geocodeFromPincode(pincode) {
+  if (!process.env.GOOGLE_MAPS_API_KEY) return { latitude: null, longitude: null };
+  try {
+    const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(pincode + ',India')}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+    const res = await axios.get(url);
+    const result = res.data.results?.[0];
+    if (!result) return { latitude: null, longitude: null };
+    const { lat, lng } = result.geometry.location;
+    return { latitude: lat, longitude: lng };
+  } catch {
+    return { latitude: null, longitude: null };
+  }
+}
 
 const addAddressHandler = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { label, flatNo, buildingName, streetAddress, landmark, area, city, state, pincode, latitude, longitude, isDefault } = req.body;
+    const { label, flatNo, buildingName, streetAddress, landmark, area, city, state, pincode, isDefault } = req.body;
+    let { latitude, longitude } = req.body;
 
     if (!label) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'label is required' });
     if (!streetAddress) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'streetAddress is required' });
     if (!city) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'city is required' });
     if (!pincode) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'pincode is required' });
-    if (latitude === undefined || latitude === null) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'latitude is required' });
-    if (longitude === undefined || longitude === null) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'longitude is required' });
     if (label.length > 30) return res.status(400).json({ success: false, error: 'INVALID_PARAM', message: 'label must be 30 characters or less' });
+
+    // Geocode from pincode if lat/lng not provided
+    if (latitude == null || longitude == null) {
+      const coords = await geocodeFromPincode(pincode);
+      latitude = coords.latitude;
+      longitude = coords.longitude;
+    }
 
     const address = await addAddress(userId, {
       label, flatNo: flatNo || '', buildingName: buildingName || '',
       streetAddress, landmark: landmark || '', area: area || '',
       city, state: state || '', pincode,
-      latitude, longitude, isDefault: isDefault || false
+      latitude: latitude ?? null,
+      longitude: longitude ?? null,
+      isDefault: isDefault || false
     });
 
     res.json({ success: true, message: 'Address added successfully', data: { addressId: address.addressId } });
