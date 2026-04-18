@@ -58,8 +58,11 @@ async function updateCartItem(userId, productId, quantity) {
     cart.items = cart.items.filter(i => i.productId !== productId);
   } else {
     const item = cart.items.find(i => i.productId === productId);
-    if (!item) throw new Error(`Item ${productId} not in cart`);
-    item.quantity = quantity;
+    if (item) {
+      item.quantity = quantity;
+    } else {
+      cart.items.push({ productId, quantity });
+    }
   }
 
   await saveCart(userId, cart);
