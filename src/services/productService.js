@@ -35,7 +35,7 @@ function isCacheValid() {
 
 async function fetchZohoData() {
   if (isCacheValid()) {
-    return { items: cache.products, groups: cache.groups };
+    return { items: cache.products, groups: cache.groups, categoryMap: cache.categoryMap };
   }
   const [items, groups, zohoCategories] = await Promise.all([
     getZohoProducts(),

@@ -5,7 +5,7 @@ async function getCustomerHandler(req, res) {
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
-  res.json({ success: true, user: customer });
+  res.json({ success: true, data: { customer }, customer, user: customer });
 }
 
 async function updateDeliveryAddress(req, res) {
