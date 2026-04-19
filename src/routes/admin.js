@@ -9,6 +9,7 @@ const {
   markPacked,
   assignVehicle,
   getPickingList,
+  getInvoiceUrl,
   getPendingCOD,
   reconcileCOD,
   listVehicles,
@@ -53,6 +54,7 @@ router.post('/orders/:orderId/decline', declineOrder);
 router.post('/orders/:orderId/packed', markPacked);
 router.post('/orders/:orderId/assign-vehicle', assignVehicle);
 router.get('/orders/:orderId/picking-list', getPickingList);
+router.get('/orders/:orderId/invoice-url', getInvoiceUrl);
 
 // Vehicles
 router.get('/vehicles', listVehicles);

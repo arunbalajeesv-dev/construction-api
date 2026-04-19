@@ -1,3 +1,4 @@
+const axios = require('axios');
 const {
   getAllOrders, getOrderById, updateOrder,
   getCustomer, getAddressById,
@@ -5,6 +6,7 @@ const {
   getDrivers, addDriver, softDeleteDriver, getDriverById
 } = require('../services/firestoreService');
 const { createZohoSalesOrder, confirmZohoSalesOrder, createZohoInvoiceFromSO } = require('../services/zohoOrderService');
+const { getAccessToken } = require('../services/zohoService');
 const { formatTimestamps } = require('../utils/formatDoc');
 
 // GET /api/admin/orders
@@ -268,6 +270,39 @@ const getPickingList = async (req, res) => {
   }
 };
 
+// GET /api/admin/orders/:orderId/invoice-url
+const getInvoiceUrl = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await getOrderById(orderId);
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
+
+    if (!order.zoho_invoice_id) {
+      return res.status(404).json({ success: false, error: 'INVOICE_NOT_FOUND', message: 'Invoice not created yet' });
+    }
+
+    try {
+      const token = await getAccessToken();
+      const response = await axios.get(
+        `${process.env.ZOHO_API_DOMAIN}/inventory/v1/invoices/${order.zoho_invoice_id}`,
+        {
+          headers: { Authorization: `Zoho-oauthtoken ${token}` },
+          params: { organization_id: process.env.ZOHO_ORG_ID }
+        }
+      );
+      const invoice = response.data.invoice || {};
+      const invoiceUrl = invoice.invoice_url || invoice.pdf_url || invoice.public_url
+        || `https://invoice.zoho.in/portal/suppliable/invoices/${order.zoho_invoice_id}`;
+      return res.json({ success: true, data: { invoiceUrl } });
+    } catch (zohoErr) {
+      const invoiceUrl = `https://invoice.zoho.in/portal/suppliable/invoices/${order.zoho_invoice_id}`;
+      return res.json({ success: true, data: { invoiceUrl } });
+    }
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
 // GET /api/admin/cod/pending
 const getPendingCOD = async (req, res) => {
   try {
@@ -391,6 +426,7 @@ module.exports = {
   markPacked,
   assignVehicle,
   getPickingList,
+  getInvoiceUrl,
   getPendingCOD,
   reconcileCOD,
   listVehicles,

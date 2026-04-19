@@ -103,6 +103,7 @@ async function buildCartResponse(userId) {
 
     return {
       productId: item.productId,
+      name: product.name,
       productName: product.name,
       unit: product.unit || '',
       quantity: item.quantity,
