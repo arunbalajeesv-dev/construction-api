@@ -7,8 +7,8 @@ const WAREHOUSE = {
   pincode: '600119'
 };
 
-const RATE_PER_KM = 25;
-const MIN_DELIVERY_CHARGE = 50;
+const RATE_PER_KM = 50;
+const MIN_DELIVERY_CHARGE = 100;
 
 const serviceablePincodes = [
   '600119', // Sholinganallur, Semmancheri, Akkarai, Paniyur, Uthandi
