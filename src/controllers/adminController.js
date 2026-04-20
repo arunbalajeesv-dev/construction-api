@@ -4,7 +4,8 @@ const {
   getAllOrders, getOrderById, updateOrder,
   getCustomer, getAddressById,
   getVehicles, addVehicle, deleteVehicle, getVehicleById,
-  getDrivers, addDriver, softDeleteDriver, getDriverById, updateDriver
+  getDrivers, addDriver, softDeleteDriver, getDriverById, updateDriver,
+  getAllHandovers, getHandoverById, updateHandover
 } = require('../services/firestoreService');
 const { createZohoSalesOrder, confirmZohoSalesOrder, createZohoInvoiceFromSO } = require('../services/zohoOrderService');
 const { getAccessToken } = require('../services/zohoService');
@@ -479,6 +480,51 @@ const removeDriver = async (req, res) => {
   }
 };
 
+// GET /api/admin/cod/handovers
+const listHandovers = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const handovers = await getAllHandovers(status || null);
+    res.json({ success: true, data: { handovers } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+// POST /api/admin/cod/confirm-handover/:handoverId
+const confirmHandover = async (req, res) => {
+  try {
+    const { handoverId } = req.params;
+    const { amountReceived, notes } = req.body;
+
+    const handover = await getHandoverById(handoverId);
+    if (!handover) {
+      return res.status(404).json({ error: 'HANDOVER_NOT_FOUND', message: 'Handover not found' });
+    }
+    if (handover.status !== 'pending') {
+      return res.status(400).json({ error: 'ALREADY_CONFIRMED', message: 'Handover already confirmed' });
+    }
+
+    await updateHandover(handoverId, {
+      status: 'confirmed',
+      amountReceived: amountReceived ?? null,
+      confirmedNotes: notes || '',
+      confirmedAt: new Date().toISOString()
+    });
+
+    res.json({
+      success: true,
+      data: {
+        handoverId,
+        status: 'confirmed',
+        amountReceived: amountReceived ?? null
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
 module.exports = {
   listOrders,
   getNewOrderCount,
@@ -498,5 +544,7 @@ module.exports = {
   listDrivers,
   createDriver,
   removeDriver,
-  setDriverPin
+  setDriverPin,
+  listHandovers,
+  confirmHandover
 };

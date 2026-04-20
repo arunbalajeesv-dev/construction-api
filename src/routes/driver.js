@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const driverAuth = require('../middleware/driverAuth');
-const { driverAuth: driverLogin, loadingComplete, getEta, arrived, codCollected, completeDelivery, getDriverProfile, updateDriverStatus, getTodayOrders, getDriverOrderDetail } = require('../controllers/driverController');
+const { driverAuth: driverLogin, loadingComplete, getEta, arrived, codCollected, completeDelivery, getDriverProfile, updateDriverStatus, getTodayOrders, getDriverOrderDetail, getCodSummary, submitHandover } = require('../controllers/driverController');
 
 // Public — no auth
 router.post('/auth', driverLogin);
@@ -14,6 +14,9 @@ router.patch('/status', updateDriverStatus);
 
 router.get('/orders/today', getTodayOrders);
 router.get('/orders/:orderId', getDriverOrderDetail);
+
+router.get('/cod/summary', getCodSummary);
+router.post('/cod/handover', submitHandover);
 
 router.post('/orders/:orderId/loading-complete', loadingComplete);
 router.get('/orders/:orderId/eta', getEta);

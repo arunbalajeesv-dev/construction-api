@@ -13,6 +13,8 @@ const {
   fixInvoice,
   getPendingCOD,
   reconcileCOD,
+  listHandovers,
+  confirmHandover,
   listVehicles,
   createVehicle,
   removeVehicle,
@@ -45,6 +47,8 @@ router.use((req, res, next) => {
 router.get('/orders/new-count', getNewOrderCount);
 router.get('/cod/pending', getPendingCOD);
 router.post('/cod/:orderId/reconcile', reconcileCOD);
+router.get('/cod/handovers', listHandovers);
+router.post('/cod/confirm-handover/:handoverId', confirmHandover);
 
 // Order list and detail
 router.get('/orders', listOrders);

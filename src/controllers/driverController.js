@@ -1,6 +1,6 @@
 const multer = require('multer');
 const bcrypt = require('bcrypt');
-const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getOrdersByDriver } = require('../services/firestoreService');
+const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getOrdersByDriver, createHandover, getHandoversByDriver } = require('../services/firestoreService');
 const { getETA } = require('../services/googleMapsService');
 const { uploadImage } = require('../services/cloudinaryService');
 const { updateZohoShipment } = require('../services/zohoOrderService');
@@ -393,4 +393,91 @@ const getDriverOrderDetail = async (req, res) => {
   }
 };
 
-module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus };
+// GET /api/driver/cod/summary
+const getCodSummary = async (req, res) => {
+  try {
+    const { driverId } = req.driver;
+    const allOrders = await getOrdersByDriver(driverId, null, null);
+
+    const todayIST = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    const todayOrders = allOrders.filter(o => {
+      if (!o.assignedAt) return false;
+      return new Date(o.assignedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0] === todayIST;
+    });
+
+    const codOrders = todayOrders.filter(o =>
+      o.status === 'delivered' && o.paymentType === 'COD'
+    );
+
+    const totalCodCollected = codOrders.reduce((sum, o) => sum + (o.codAmountCollected || 0), 0);
+
+    const existing = await getHandoversByDriver(driverId, todayStr);
+    const handoverStatus = existing.length > 0 ? 'completed' : 'pending';
+
+    res.json({
+      success: true,
+      data: {
+        date: todayStr,
+        totalOrders: todayOrders.length,
+        codOrders: codOrders.length,
+        totalCodCollected,
+        handoverStatus,
+        orders: codOrders.map(o => ({
+          orderId: o.orderId,
+          customerName: o.customerName || '',
+          amountCollected: o.codAmountCollected || 0,
+          deliveredAt: o.deliveredAt || null
+        }))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+// POST /api/driver/cod/handover
+const submitHandover = async (req, res) => {
+  try {
+    const { driverId, name: driverName } = req.driver;
+    const { totalAmount, notes } = req.body;
+
+    if (totalAmount === undefined || totalAmount === null || typeof totalAmount !== 'number' || totalAmount <= 0) {
+      return res.status(400).json({ error: 'INVALID_AMOUNT', message: 'totalAmount must be a positive number' });
+    }
+
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const existing = await getHandoversByDriver(driverId, todayStr);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'HANDOVER_EXISTS', message: 'Handover already submitted for today' });
+    }
+
+    const handover = {
+      handoverId: 'HO' + Date.now(),
+      driverId,
+      driverName,
+      totalAmount,
+      notes: notes || '',
+      date: todayStr,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+
+    await createHandover(handover);
+
+    res.json({
+      success: true,
+      data: {
+        handoverId: handover.handoverId,
+        totalAmount: handover.totalAmount,
+        status: handover.status,
+        message: 'Handover submitted. Warehouse will confirm receipt.'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus, getCodSummary, submitHandover };

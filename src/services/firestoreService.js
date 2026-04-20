@@ -160,6 +160,37 @@ async function getAddressById(addressId) {
   return doc.data();
 }
 
+// COD HANDOVERS
+async function createHandover(handoverData) {
+  await db.collection('codHandovers').doc(handoverData.handoverId).set(handoverData);
+  return handoverData;
+}
+
+async function getHandoversByDriver(driverId, date) {
+  const snap = await db.collection('codHandovers')
+    .where('driverId', '==', driverId)
+    .where('date', '==', date)
+    .get();
+  return snap.docs.map(d => d.data());
+}
+
+async function getAllHandovers(status) {
+  const snap = await db.collection('codHandovers').orderBy('createdAt', 'desc').get();
+  let handovers = snap.docs.map(d => d.data());
+  if (status) handovers = handovers.filter(h => h.status === status);
+  return handovers;
+}
+
+async function getHandoverById(handoverId) {
+  const doc = await db.collection('codHandovers').doc(handoverId).get();
+  return doc.exists ? doc.data() : null;
+}
+
+async function updateHandover(handoverId, updates) {
+  await db.collection('codHandovers').doc(handoverId).update(updates);
+  return { ...updates, handoverId };
+}
+
 // APP SETTINGS
 async function getSettings() {
   const doc = await db.collection('config').doc('settings').get();
@@ -278,6 +309,11 @@ async function getOrdersByDriver(driverId, startISO, endISO) {
 module.exports = {
   db,
   getCustomer,
+  createHandover,
+  getHandoversByDriver,
+  getAllHandovers,
+  getHandoverById,
+  updateHandover,
   saveCustomer,
   getCustomerByPhone,
   getCart,
