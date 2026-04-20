@@ -192,6 +192,66 @@ const completeDelivery = [
   }
 ];
 
+const STATUS_LABELS = {
+  accepted: 'Order Accepted',
+  ready_for_dispatch: 'Ready for Dispatch',
+  loading: 'Loading',
+  out_for_delivery: 'Out for Delivery',
+  arrived: 'Arrived',
+  delivered: 'Delivered',
+  declined: 'Declined'
+};
+
+// GET /api/driver/orders/today
+const getTodayOrders = async (req, res) => {
+  try {
+    const { driverId } = req.driver;
+    const allOrders = await getOrdersByDriver(driverId, null, null);
+
+    const todayIST = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0];
+    const todayOrders = allOrders.filter(o => {
+      if (!o.assignedAt) return false;
+      return new Date(o.assignedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0] === todayIST;
+    });
+
+    todayOrders.sort((a, b) => (a.assignedAt || '').localeCompare(b.assignedAt || ''));
+
+    const orders = await Promise.all(todayOrders.map(async (o) => {
+      const address = o.addressId ? await getAddressById(o.addressId).catch(() => null) : null;
+      const parts = [address?.flatNo, address?.buildingName, address?.streetAddress, address?.city, address?.pincode].filter(Boolean);
+      const lat = address?.latitude;
+      const lng = address?.longitude;
+
+      return {
+        orderId: o.orderId,
+        status: o.status,
+        statusLabel: STATUS_LABELS[o.status] || o.status,
+        customerName: o.customerName || '',
+        customerPhone: o.customerPhone || '',
+        deliveryAddress: {
+          fullAddress: parts.join(', '),
+          latitude: lat || null,
+          longitude: lng || null,
+          googleMapsUrl: lat && lng ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : null
+        },
+        items: (o.items || []).map(i => ({ productName: i.productName || i.name, quantity: i.quantity, unit: i.unit || '' })),
+        itemCount: (o.items || []).length,
+        grandTotal: o.grandTotal || 0,
+        deliveryCharge: o.deliveryCharge || 0,
+        paymentType: o.paymentType || '',
+        paymentStatus: o.paymentStatus || '',
+        codCollected: o.codCollectedByDriver || false,
+        codAmountToCollect: o.paymentType === 'COD' ? (o.grandTotal || 0) : 0,
+        assignedAt: o.assignedAt || null
+      };
+    }));
+
+    res.json({ success: true, data: { orders, count: orders.length } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
 // GET /api/driver/profile
 const getDriverProfile = async (req, res) => {
   try {
@@ -270,4 +330,67 @@ const updateDriverStatus = async (req, res) => {
   }
 };
 
-module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getDriverProfile, updateDriverStatus };
+// GET /api/driver/orders/:orderId
+const getDriverOrderDetail = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const order = await getOrderById(orderId);
+    if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
+
+    if (order.driverId !== req.driver.driverId) {
+      return res.status(403).json({ success: false, error: 'FORBIDDEN', message: 'This order is not assigned to you' });
+    }
+
+    const address = order.addressId ? await getAddressById(order.addressId).catch(() => null) : null;
+    const parts = [address?.flatNo, address?.buildingName, address?.streetAddress, address?.city, address?.state, address?.pincode].filter(Boolean);
+    const fullAddress = parts.join(', ');
+    const lat = address?.latitude;
+    const lng = address?.longitude;
+    const googleMapsUrl = lat && lng
+      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`;
+
+    res.json({
+      success: true,
+      data: {
+        order: {
+          orderId: order.orderId,
+          status: order.status,
+          statusLabel: STATUS_LABELS[order.status] || order.status,
+          customerName: order.customerName || '',
+          customerPhone: order.customerPhone || '',
+          deliveryAddress: {
+            fullAddress,
+            landmark: address?.landmark || '',
+            area: address?.area || '',
+            latitude: lat || null,
+            longitude: lng || null,
+            googleMapsUrl
+          },
+          items: (order.items || []).map(i => ({
+            productName: i.productName || i.name || '',
+            quantity: i.quantity,
+            unit: i.unit || '',
+            unitPrice: i.unitPrice || i.price || 0,
+            itemTotal: i.itemTotal || i.totalPrice || 0
+          })),
+          grandTotal: order.grandTotal || 0,
+          subtotal: order.subtotal || order.totalWithoutGST || 0,
+          gstTotal: order.gstTotal || order.totalGST || 0,
+          deliveryCharge: order.deliveryCharge || 0,
+          paymentType: order.paymentType || '',
+          paymentStatus: order.paymentStatus || '',
+          codCollected: order.codCollectedByDriver || false,
+          codAmountToCollect: order.paymentType === 'COD' ? (order.grandTotal || 0) : 0,
+          deliveryOtp: order.status === 'arrived' ? order.deliveryOtp : null,
+          assignedAt: order.assignedAt || null,
+          acceptedAt: order.acceptedAt || null
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus };
