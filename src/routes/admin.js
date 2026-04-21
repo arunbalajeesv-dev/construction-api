@@ -15,6 +15,7 @@ const {
   reconcileCOD,
   listHandovers,
   confirmHandover,
+  listCodHistory,
   listVehicles,
   createVehicle,
   removeVehicle,
@@ -49,6 +50,7 @@ router.get('/cod/pending', getPendingCOD);
 router.post('/cod/:orderId/reconcile', reconcileCOD);
 router.get('/cod/handovers', listHandovers);
 router.post('/cod/confirm-handover/:handoverId', confirmHandover);
+router.get('/cod/history', listCodHistory);
 
 // Order list and detail
 router.get('/orders', listOrders);

@@ -1,6 +1,6 @@
 const multer = require('multer');
 const bcrypt = require('bcrypt');
-const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getOrdersByDriver, createHandover, getHandoversByDriver } = require('../services/firestoreService');
+const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getVehicleById, getOrdersByDriver, createHandover, getHandoversByDriver, getAllHandoversForDriver } = require('../services/firestoreService');
 const { getETA } = require('../services/googleMapsService');
 const { uploadImage } = require('../services/cloudinaryService');
 const { updateZohoShipment } = require('../services/zohoOrderService');
@@ -182,8 +182,24 @@ const completeDelivery = [
         });
       }
 
-      if (order.vehicleId) updateVehicle(order.vehicleId, { isAvailable: true }).catch(() => {});
-      if (order.driverId) updateDriver(order.driverId, { isAvailable: true }).catch(() => {});
+      if (order.vehicleId) {
+        (async () => {
+          try {
+            const v = await getVehicleById(order.vehicleId);
+            const newCount = Math.max(0, (v?.activeOrderCount ?? 1) - 1);
+            await updateVehicle(order.vehicleId, { isAvailable: newCount < 2, activeOrderCount: newCount });
+          } catch (e) { console.error('Vehicle count decrement failed:', e.message); }
+        })();
+      }
+      if (order.driverId) {
+        (async () => {
+          try {
+            const d = await getDriverById(order.driverId);
+            const newCount = Math.max(0, (d?.activeOrderCount ?? 1) - 1);
+            await updateDriver(order.driverId, { isAvailable: newCount < 2, activeOrderCount: newCount });
+          } catch (e) { console.error('Driver count decrement failed:', e.message); }
+        })();
+      }
 
       res.json({ success: true, data: { order: formatTimestamps(updated) } });
     } catch (err) {
@@ -203,16 +219,15 @@ const STATUS_LABELS = {
 };
 
 // GET /api/driver/orders/today
+// Note: endpoint name kept for Flutter compatibility — now returns ALL incomplete
+// orders (status not delivered/declined), not just today's
 const getTodayOrders = async (req, res) => {
   try {
     const { driverId } = req.driver;
     const allOrders = await getOrdersByDriver(driverId, null, null);
 
-    const todayIST = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0];
-    const todayOrders = allOrders.filter(o => {
-      if (!o.assignedAt) return false;
-      return new Date(o.assignedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0] === todayIST;
-    });
+    const DONE = ['delivered', 'declined'];
+    const todayOrders = allOrders.filter(o => !DONE.includes(o.status));
 
     todayOrders.sort((a, b) => (a.assignedAt || '').localeCompare(b.assignedAt || ''));
 
@@ -393,6 +408,49 @@ const getDriverOrderDetail = async (req, res) => {
   }
 };
 
+// GET /api/driver/cod/history
+const getDriverCodHistory = async (req, res) => {
+  try {
+    const { driverId } = req.driver;
+    const { date, orderId } = req.query;
+
+    const [allOrders, handovers] = await Promise.all([
+      getOrdersByDriver(driverId, null, null),
+      getAllHandoversForDriver(driverId)
+    ]);
+
+    const orderRecords = allOrders
+      .filter(o => o.paymentType === 'COD' && o.status === 'delivered')
+      .map(o => ({
+        type: 'order',
+        orderId: o.orderId,
+        amount: o.codAmountCollected || o.codAmount || 0,
+        status: o.codCollected ? 'reconciled' : 'delivered',
+        date: (o.reconciledAt || o.deliveredAt || '').slice(0, 10),
+        createdAt: o.reconciledAt || o.deliveredAt || o.createdAt
+      }));
+
+    const handoverRecords = handovers.map(h => ({
+      type: 'handover',
+      handoverId: h.handoverId,
+      amount: h.totalAmount,
+      status: h.status,
+      date: h.date,
+      notes: h.notes || '',
+      createdAt: h.createdAt
+    }));
+
+    let records = [...orderRecords, ...handoverRecords];
+    if (orderId) records = records.filter(r => r.orderId === orderId);
+    if (date) records = records.filter(r => r.date === date);
+    records.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    res.json({ success: true, data: { count: records.length, records } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
 // GET /api/driver/cod/summary
 const getCodSummary = async (req, res) => {
   try {
@@ -480,4 +538,4 @@ const submitHandover = async (req, res) => {
   }
 };
 
-module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus, getCodSummary, submitHandover };
+module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus, getCodSummary, submitHandover, getDriverCodHistory };

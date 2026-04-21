@@ -297,6 +297,14 @@ async function getDriverByToken(token) {
   return { driverId: snapshot.docs[0].id, ...snapshot.docs[0].data() };
 }
 
+async function getAllHandoversForDriver(driverId) {
+  const snap = await db.collection('codHandovers')
+    .where('driverId', '==', driverId)
+    .get();
+  const docs = snap.docs.map(d => d.data());
+  return docs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+}
+
 async function getOrdersByDriver(driverId, startISO, endISO) {
   let q = db.collection('orders').where('driverId', '==', driverId);
   if (startISO) q = q.where('assignedAt', '>=', startISO);
@@ -347,5 +355,6 @@ module.exports = {
   getDriverById,
   getDriverByPhone,
   getDriverByToken,
-  getOrdersByDriver
+  getOrdersByDriver,
+  getAllHandoversForDriver
 };
