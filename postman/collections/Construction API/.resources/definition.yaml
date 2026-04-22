@@ -1,3 +1,0 @@
-$kind: collection
-name: Construction API
-description: API collection for the Construction supply app — covers Auth, Home, Products, Cart, and Customers.

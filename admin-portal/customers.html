@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suppliable Admin — Customer Lookup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:#1e2235; --navy-light:#2a3050; --red:#e53935; --blue:#1565c0;
+    --bg:#f0f2f7; --card:#ffffff; --text:#1a1f36; --muted:#6b7280; --border:#e5e7eb;
+    --green:#10b981; --red2:#ef4444; --amber:#f59e0b;
+  }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+
+  /* SIDEBAR */
+  .sidebar { width:220px; min-height:100vh; background:var(--navy); display:flex; flex-direction:column; position:fixed; left:0; top:0; z-index:40; }
+  .sidebar-brand { padding:20px 16px 16px; border-bottom:1px solid rgba(255,255,255,0.08); }
+  .sidebar-brand .name { color:#fff; font-size:18px; font-weight:700; }
+  .sidebar-brand .sub { color:rgba(255,255,255,0.4); font-size:11px; margin-top:2px; }
+  .sidebar-nav { flex:1; padding:12px 0; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:11px 16px; color:rgba(255,255,255,0.75); font-size:14px; font-weight:500; cursor:pointer; text-decoration:none; transition:background 0.15s; border-left:3px solid transparent; }
+  .nav-item:hover { background:var(--navy-light); color:#fff; }
+  .nav-item.active { background:var(--navy-light); color:#fff; border-left-color:var(--red); }
+  .sidebar-bottom { padding:16px; border-top:1px solid rgba(255,255,255,0.08); }
+  .online-indicator { display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.5); font-size:12px; }
+  .online-dot { width:8px; height:8px; background:var(--green); border-radius:50%; }
+
+  /* MAIN */
+  .main { margin-left:220px; flex:1; display:flex; flex-direction:column; }
+  .topbar { height:60px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 24px; position:sticky; top:0; z-index:30; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+  .topbar-title { font-size:18px; font-weight:700; }
+  .btn-logout { background:none; border:none; color:var(--muted); font-size:13px; font-family:'DM Sans',sans-serif; cursor:pointer; padding:6px 10px; border-radius:6px; transition:background 0.15s; }
+  .btn-logout:hover { background:var(--bg); }
+
+  .content { padding:24px; max-width:900px; display:flex; flex-direction:column; gap:20px; }
+
+  /* CARDS */
+  .card { background:#fff; border-radius:12px; padding:24px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid var(--border); }
+  .card-title { font-size:15px; font-weight:700; color:var(--text); }
+  .card-desc { font-size:13px; color:var(--muted); margin-top:3px; line-height:1.5; }
+
+  /* SEARCH SECTION */
+  .search-box { display:flex; gap:10px; margin-bottom:20px; }
+  .search-input { flex:1; padding:12px 14px; border:1.5px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; outline:none; transition:border-color 0.2s; }
+  .search-input:focus { border-color:var(--blue); }
+  .btn { padding:10px 18px; border-radius:7px; border:none; font-family:'DM Sans',sans-serif; font-size:13px; font-weight:600; cursor:pointer; transition:all 0.15s; }
+  .btn-primary { background:var(--blue); color:#fff; }
+  .btn-primary:hover { background:#0d47a1; }
+  .btn-primary:disabled { background:#aaa; cursor:not-allowed; }
+  .btn-ghost { background:none; border:1px solid var(--border); color:var(--muted); }
+  .btn-ghost:hover { background:var(--bg); }
+
+  /* LOADING & ERROR */
+  .loading { text-align:center; padding:40px; color:var(--muted); }
+  .error-msg { background:#fee2e2; border:1px solid #fecaca; border-radius:8px; padding:14px 16px; color:#991b1b; font-size:13px; margin-bottom:16px; }
+  .not-found { text-align:center; padding:40px; color:var(--muted); font-size:14px; }
+
+  /* CUSTOMER DETAILS */
+  .customer-result { display:none; }
+  .customer-result.show { display:block; }
+  .detail-section { margin-bottom:24px; }
+  .detail-section-title { font-size:13px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:12px; }
+  .detail-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:16px; }
+  .detail-item { padding:12px; background:var(--bg); border-radius:8px; border:1px solid var(--border); }
+  .detail-label { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:4px; }
+  .detail-value { font-size:14px; font-weight:500; color:var(--text); word-break:break-word; }
+  .detail-value.mono { font-family:'JetBrains Mono',monospace; font-size:12px; }
+  .detail-value.muted { color:var(--muted); }
+  .badge { display:inline-block; padding:3px 9px; border-radius:6px; font-size:11px; font-weight:600; }
+  .badge-true { background:#d1fae5; color:#065f46; }
+  .badge-false { background:#f3f4f6; color:#6b7280; }
+
+  /* ADDRESS CARD */
+  .address-item { padding:14px; background:var(--bg); border-radius:8px; border:1px solid var(--border); }
+  .address-label { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; }
+  .address-value { font-size:13px; color:var(--text); line-height:1.6; }
+  .address-value.empty { color:var(--muted); font-style:italic; }
+  .address-coords { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted); margin-top:6px; }
+
+  /* TABLE */
+  .mini-table { width:100%; border-collapse:collapse; }
+  .mini-table th { padding:9px 12px; font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.05em; background:var(--bg); border-bottom:1px solid var(--border); text-align:left; }
+  .mini-table td { padding:11px 12px; font-size:13px; border-bottom:1px solid var(--border); vertical-align:middle; }
+  .mini-table tr:last-child td { border-bottom:none; }
+  .mini-table tr:hover td { background:#f8f9fc; }
+  .order-id-link { color:var(--blue); font-weight:600; font-size:12px; }
+  .status-pill { display:inline-flex; align-items:center; padding:3px 9px; border-radius:12px; font-size:11px; font-weight:600; white-space:nowrap; }
+  .status-warehouse_review { background:#fef3c7; color:#92400e; }
+  .status-accepted { background:#dbeafe; color:#1e40af; }
+  .status-packing { background:#ede9fe; color:#5b21b6; }
+  .status-ready_for_dispatch { background:#ede9fe; color:#5b21b6; }
+  .status-out_for_delivery { background:#fff3e0; color:#c2410c; }
+  .status-delivered { background:#d1fae5; color:#065f46; }
+  .status-declined { background:#fee2e2; color:#991b1b; }
+  .amount-mono { font-family:'JetBrains Mono',monospace; font-weight:600; }
+
+  /* TOAST */
+  #toast { position:fixed; bottom:24px; right:24px; z-index:999; background:var(--navy); color:#fff; padding:14px 20px; border-radius:10px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,0.25); transform:translateY(80px); opacity:0; transition:all 0.3s; pointer-events:none; }
+  #toast.show { transform:translateY(0); opacity:1; }
+  #toast.success { background:var(--green); }
+  #toast.error { background:var(--red2); }
+
+  @media (max-width: 768px) {
+    .search-box { flex-direction:column; }
+    .sidebar { display:none; }
+    .main { margin-left:0; }
+    .content { max-width:100%; }
+    .detail-grid { grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">🧱 Suppliable</div>
+    <div class="sub">Admin Portal</div>
+  </div>
+  <nav class="sidebar-nav">
+    <a class="nav-item" href="orders.html">📦 Orders</a>
+    <a class="nav-item" href="cod.html">💰 COD Reconciliation</a>
+    <a class="nav-item" href="customers.html" class="active">👥 Customers</a>
+    <a class="nav-item" href="settings.html">⚙️ Settings</a>
+    <a class="nav-item" href="https://inventory.zoho.in" target="_blank">🔗 Open Zoho</a>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="online-indicator"><span class="online-dot"></span> Online</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Customer Lookup</div>
+    <button class="btn-logout" onclick="logout()">Logout</button>
+  </div>
+  <div class="content">
+
+    <!-- SEARCH CARD -->
+    <div class="card">
+      <div class="card-title">👥 Search Customer by Phone</div>
+      <div class="card-desc">Enter a phone number to view complete customer details</div>
+      <div class="search-box" style="margin-top: 16px;">
+        <input type="text" class="search-input" id="phoneInput" placeholder="e.g. 919876543210" onkeypress="if(event.key === 'Enter') searchCustomer()">
+        <button class="btn btn-primary" onclick="searchCustomer()" id="searchBtn">Search</button>
+        <button class="btn btn-ghost" onclick="resetSearch()" id="resetBtn">Clear</button>
+      </div>
+    </div>
+
+    <!-- RESULT CARD -->
+    <div class="card customer-result" id="resultCard">
+      <div class="card-title">Customer Details</div>
+      <div id="errorContainer"></div>
+
+      <!-- BASIC INFO -->
+      <div class="detail-section">
+        <div class="detail-section-title">Basic Information</div>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">User ID</div>
+            <div class="detail-value mono" id="detailUserId">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Phone</div>
+            <div class="detail-value" id="detailPhone">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Name</div>
+            <div class="detail-value" id="detailName">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BUSINESS INFO -->
+      <div class="detail-section">
+        <div class="detail-section-title">Business Information</div>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Is Business</div>
+            <div id="detailIsBusiness"></div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Business Name</div>
+            <div class="detail-value" id="detailBusinessName">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">GSTIN</div>
+            <div class="detail-value mono" id="detailGSTIN">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Zoho Contact ID</div>
+            <div class="detail-value mono" id="detailZohoContactId">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ADDRESSES -->
+      <div class="detail-section">
+        <div class="detail-section-title">Delivery Address</div>
+        <div class="address-item">
+          <div class="address-label">Address Line 1</div>
+          <div class="address-value" id="addressDelivery1">—</div>
+        </div>
+        <div class="address-item" style="margin-top: 12px;">
+          <div class="address-label">Address Line 2</div>
+          <div class="address-value" id="addressDelivery2">—</div>
+        </div>
+        <div class="detail-grid" style="margin-top: 12px;">
+          <div class="detail-item">
+            <div class="detail-label">City</div>
+            <div class="detail-value" id="addressDeliveryCity">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">State</div>
+            <div class="detail-value" id="addressDeliveryState">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Pincode</div>
+            <div class="detail-value" id="addressDeliveryPin">—</div>
+          </div>
+          <div class="detail-item">
+            <div class="detail-label">Label</div>
+            <div class="detail-value" id="addressDeliveryLabel">—</div>
+          </div>
+        </div>
+        <div class="address-item" style="margin-top: 12px;">
+          <div class="address-label">Coordinates</div>
+          <div class="address-coords">
+            Lat: <span id="addressDeliveryLat">—</span> | Lng: <span id="addressDeliveryLng">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- REGISTERED ADDRESS -->
+      <div class="detail-section">
+        <div class="detail-section-title">Registered Address</div>
+        <div class="address-item">
+          <div class="address-label">Address</div>
+          <div class="address-value" id="addressRegistered">—</div>
+        </div>
+      </div>
+
+      <!-- METADATA -->
+      <div class="detail-section">
+        <div class="detail-section-title">Metadata</div>
+        <div class="detail-grid">
+          <div class="detail-item">
+            <div class="detail-label">Created At</div>
+            <div class="detail-value" id="detailCreatedAt">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ORDERS -->
+      <div class="detail-section">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+          <div class="detail-section-title" style="margin: 0;">Order History</div>
+          <button class="btn btn-primary" id="loadOrdersBtn" onclick="loadCustomerOrders()" style="padding: 6px 12px; font-size: 12px;">Load Last 10 Orders</button>
+        </div>
+        <div id="ordersLoadingContainer" style="display: none; text-align: center; padding: 20px; color: var(--muted);">
+          Loading orders...
+        </div>
+        <div id="ordersContainer" style="display: none;">
+          <div style="overflow-x: auto;">
+            <table class="mini-table" style="margin-top: 8px;">
+              <thead>
+                <tr>
+                  <th>Order ID</th>
+                  <th>Date</th>
+                  <th>Status</th>
+                  <th>Amount</th>
+                  <th>Address</th>
+                </tr>
+              </thead>
+              <tbody id="ordersTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="ordersEmptyState" style="display: none; text-align: center; padding: 20px; color: var(--muted); font-size: 13px;">
+          No orders found
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API_BASE = '/api/admin';
+let adminToken = sessionStorage.getItem('adminToken');
+let currentCustomer = null;
+
+function showToast(message, type = 'info') {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = `show ${type}`;
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+function logout() {
+  sessionStorage.removeItem('adminToken');
+  window.location.href = 'login.html';
+}
+
+async function searchCustomer() {
+  const phone = document.getElementById('phoneInput').value.trim();
+  if (!phone) {
+    showToast('Please enter a phone number', 'error');
+    return;
+  }
+
+  const searchBtn = document.getElementById('searchBtn');
+  searchBtn.disabled = true;
+  searchBtn.textContent = 'Searching...';
+
+  try {
+    const response = await fetch(`${API_BASE}/customers/phone/${phone}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        showToast('Customer not found', 'error');
+        resetSearch();
+        return;
+      }
+      if (response.status === 401) {
+        showToast('Unauthorized - Please login again', 'error');
+        logout();
+        return;
+      }
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to fetch customer');
+    }
+
+    const data = await response.json();
+    displayCustomerDetails(data.data.customer);
+    showToast('Customer found', 'success');
+  } catch (err) {
+    showToast(err.message || 'An error occurred', 'error');
+    console.error('Search error:', err);
+  } finally {
+    searchBtn.disabled = false;
+    searchBtn.textContent = 'Search';
+  }
+}
+
+function displayCustomerDetails(customer) {
+  currentCustomer = customer;
+  const resultCard = document.getElementById('resultCard');
+  const errorContainer = document.getElementById('errorContainer');
+  errorContainer.innerHTML = '';
+
+  // Reset orders display
+  document.getElementById('ordersContainer').style.display = 'none';
+  document.getElementById('ordersTableBody').innerHTML = '';
+  document.getElementById('ordersEmptyState').style.display = 'none';
+  document.getElementById('ordersLoadingContainer').style.display = 'none';
+  document.getElementById('loadOrdersBtn').disabled = false;
+  document.getElementById('loadOrdersBtn').textContent = 'Load Last 10 Orders';
+
+  // Basic Info
+  document.getElementById('detailUserId').textContent = customer.userId || '—';
+  document.getElementById('detailPhone').textContent = customer.phone || '—';
+  document.getElementById('detailName').textContent = customer.name || '—';
+
+  // Business Info
+  const isBizBadge = document.getElementById('detailIsBusiness');
+  isBizBadge.innerHTML = customer.isBusiness 
+    ? '<span class="badge badge-true">YES</span>'
+    : '<span class="badge badge-false">NO</span>';
+
+  document.getElementById('detailBusinessName').textContent = customer.businessName || '—';
+  document.getElementById('detailGSTIN').textContent = customer.gstin || '—';
+  document.getElementById('detailZohoContactId').textContent = customer.zohoContactId || '—';
+
+  // Delivery Address
+  if (customer.deliveryAddress) {
+    const addr = customer.deliveryAddress;
+    document.getElementById('addressDelivery1').textContent = addr.address_line1 || '—';
+    document.getElementById('addressDelivery2').textContent = addr.address_line2 || '—';
+    document.getElementById('addressDeliveryCity').textContent = addr.city || '—';
+    document.getElementById('addressDeliveryState').textContent = addr.state || '—';
+    document.getElementById('addressDeliveryPin').textContent = addr.pincode || '—';
+    document.getElementById('addressDeliveryLabel').textContent = addr.label || '—';
+    document.getElementById('addressDeliveryLat').textContent = addr.lat || '—';
+    document.getElementById('addressDeliveryLng').textContent = addr.lng || '—';
+  } else {
+    document.getElementById('addressDelivery1').textContent = '—';
+    document.getElementById('addressDelivery2').textContent = '—';
+    document.getElementById('addressDeliveryCity').textContent = '—';
+    document.getElementById('addressDeliveryState').textContent = '—';
+    document.getElementById('addressDeliveryPin').textContent = '—';
+    document.getElementById('addressDeliveryLabel').textContent = '—';
+    document.getElementById('addressDeliveryLat').textContent = '—';
+    document.getElementById('addressDeliveryLng').textContent = '—';
+  }
+
+  // Registered Address
+  if (customer.registeredAddress) {
+    document.getElementById('addressRegistered').textContent = 
+      typeof customer.registeredAddress === 'string' 
+        ? customer.registeredAddress 
+        : JSON.stringify(customer.registeredAddress, null, 2);
+  } else {
+    document.getElementById('addressRegistered').innerHTML = '<span class="address-value empty">Not provided</span>';
+  }
+
+  // Metadata
+  if (customer.createdAt) {
+    const date = new Date(customer.createdAt);
+    document.getElementById('detailCreatedAt').textContent = date.toLocaleString('en-IN');
+  } else {
+    document.getElementById('detailCreatedAt').textContent = '—';
+  }
+
+  resultCard.classList.add('show');
+}
+
+function resetSearch() {
+  document.getElementById('phoneInput').value = '';
+  document.getElementById('resultCard').classList.remove('show');
+  document.getElementById('phoneInput').focus();
+  currentCustomer = null;
+}
+
+async function loadCustomerOrders() {
+  if (!currentCustomer || !currentCustomer.userId) {
+    showToast('No customer selected', 'error');
+    return;
+  }
+
+  const loadBtn = document.getElementById('loadOrdersBtn');
+  const loadingContainer = document.getElementById('ordersLoadingContainer');
+  const ordersContainer = document.getElementById('ordersContainer');
+  const emptyState = document.getElementById('ordersEmptyState');
+
+  loadBtn.disabled = true;
+  loadBtn.textContent = 'Loading...';
+  loadingContainer.style.display = 'block';
+  ordersContainer.style.display = 'none';
+  emptyState.style.display = 'none';
+
+  try {
+    const response = await fetch(`${API_BASE}/customers/${currentCustomer.userId}/orders?limit=10`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${adminToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      if (response.status === 401) {
+        showToast('Unauthorized - Please login again', 'error');
+        logout();
+        return;
+      }
+      throw new Error('Failed to fetch orders');
+    }
+
+    const data = await response.json();
+    const orders = data.data.orders || [];
+
+    if (orders.length === 0) {
+      loadingContainer.style.display = 'none';
+      emptyState.style.display = 'block';
+      showToast('No orders found', 'info');
+      return;
+    }
+
+    displayOrders(orders);
+    loadingContainer.style.display = 'none';
+    ordersContainer.style.display = 'block';
+    showToast(`Loaded ${orders.length} orders`, 'success');
+  } catch (err) {
+    showToast(err.message || 'Failed to load orders', 'error');
+    console.error('Orders error:', err);
+    loadingContainer.style.display = 'none';
+  } finally {
+    loadBtn.disabled = false;
+    loadBtn.textContent = 'Load Last 10 Orders';
+  }
+}
+
+function displayOrders(orders) {
+  const tbody = document.getElementById('ordersTableBody');
+  tbody.innerHTML = '';
+
+  orders.forEach(order => {
+    const date = order.createdAt ? new Date(order.createdAt).toLocaleDateString('en-IN') : '—';
+    const status = order.status || 'unknown';
+    const amount = order.grandTotal || order.grand_total || 0;
+    const address = order.deliveryAddress?.address_line1 || '—';
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td><span class="order-id-link">${order.id || order.orderId || '—'}</span></td>
+      <td>${date}</td>
+      <td><span class="status-pill status-${status}">${status.replace(/_/g, ' ').toUpperCase()}</span></td>
+      <td class="amount-mono">₹${parseFloat(amount).toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}</td>
+      <td>${address}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+// Check auth on page load
+window.addEventListener('load', () => {
+  if (!adminToken) {
+    window.location.href = 'login.html';
+  }
+  document.getElementById('phoneInput').focus();
+});
+</script>
+
+</body>
+</html>

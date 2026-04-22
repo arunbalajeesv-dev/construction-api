@@ -1,0 +1,23 @@
+node_modules/
+.git/
+.gitignore
+
+# Env files — secrets are injected at runtime via env_file or platform env vars
+.env
+.env.*
+# Keep committed safe files
+!.env.template
+
+# Firebase credentials — pass as FIREBASE_SERVICE_ACCOUNT env var (JSON string)
+firebase-service-account.json
+
+# Logs
+*.log
+
+# Dev-only directories
+scripts/
+postman/
+nodemon.json
+
+# Test artifacts
+coverage/
