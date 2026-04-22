@@ -22,7 +22,9 @@ const {
   listDrivers,
   createDriver,
   removeDriver,
-  setDriverPin
+  setDriverPin,
+  listProductImages,
+  deleteProductImage
 } = require('../controllers/adminController');
 
 // Auth — no middleware on this route
@@ -75,5 +77,9 @@ router.get('/drivers', listDrivers);
 router.post('/drivers', createDriver);
 router.delete('/drivers/:driverId', removeDriver);
 router.post('/drivers/:driverId/set-pin', setDriverPin);
+
+// Product images (Firebase Storage)
+router.get('/products/images', listProductImages);
+router.delete('/products/images/:filename', deleteProductImage);
 
 module.exports = router;

@@ -15,4 +15,21 @@ async function uploadToFirebase(fileBuffer, mimeType, folder) {
   return `https://storage.googleapis.com/${bucket.name}/${filename}`;
 }
 
-module.exports = { uploadToFirebase };
+async function listProductImages() {
+  const bucket = admin.storage().bucket();
+  const [files] = await bucket.getFiles({ prefix: 'products/' });
+  return files
+    .filter(f => f.name !== 'products/')
+    .map(f => ({
+      name: f.name.replace('products/', ''),
+      url: `https://storage.googleapis.com/${bucket.name}/${f.name}`,
+      uploadedAt: f.metadata.timeCreated || null
+    }));
+}
+
+async function deleteProductImage(filename) {
+  const bucket = admin.storage().bucket();
+  await bucket.file(`products/${filename}`).delete();
+}
+
+module.exports = { uploadToFirebase, listProductImages, deleteProductImage };

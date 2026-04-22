@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suppliable Admin — Product Images</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy:#1e2235; --navy-light:#2a3050; --red:#e53935; --blue:#1565c0;
+    --bg:#f0f2f7; --card:#ffffff; --text:#1a1f36; --muted:#6b7280; --border:#e5e7eb;
+    --green:#10b981; --red2:#ef4444; --amber:#f59e0b;
+  }
+  body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
+
+  .sidebar { width:220px; min-height:100vh; background:var(--navy); display:flex; flex-direction:column; position:fixed; left:0; top:0; z-index:40; }
+  .sidebar-brand { padding:20px 16px 16px; border-bottom:1px solid rgba(255,255,255,0.08); }
+  .sidebar-brand .name { color:#fff; font-size:18px; font-weight:700; }
+  .sidebar-brand .sub { color:rgba(255,255,255,0.4); font-size:11px; margin-top:2px; }
+  .sidebar-nav { flex:1; padding:12px 0; }
+  .nav-item { display:flex; align-items:center; gap:10px; padding:11px 16px; color:rgba(255,255,255,0.75); font-size:14px; font-weight:500; cursor:pointer; text-decoration:none; transition:background 0.15s; border-left:3px solid transparent; }
+  .nav-item:hover { background:var(--navy-light); color:#fff; }
+  .nav-item.active { background:var(--navy-light); color:#fff; border-left-color:var(--red); }
+  .sidebar-bottom { padding:16px; border-top:1px solid rgba(255,255,255,0.08); }
+  .online-indicator { display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.5); font-size:12px; }
+  .online-dot { width:8px; height:8px; background:var(--green); border-radius:50%; flex-shrink:0; }
+
+  .main { margin-left:220px; flex:1; display:flex; flex-direction:column; min-height:100vh; }
+  .topbar { height:60px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 24px; position:sticky; top:0; z-index:30; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
+  .topbar-title { font-size:18px; font-weight:700; }
+  .topbar-right { display:flex; align-items:center; gap:12px; }
+  .btn-logout { background:none; border:none; color:var(--muted); font-size:13px; font-family:'DM Sans',sans-serif; cursor:pointer; padding:6px 10px; border-radius:6px; transition:background 0.15s; }
+  .btn-logout:hover { background:var(--bg); }
+
+  .content { padding:24px; flex:1; }
+
+  /* TOOLBAR */
+  .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+  .img-count { font-size:13px; color:var(--muted); }
+  .btn-upload {
+    background:var(--blue); color:#fff; border:none; padding:10px 20px;
+    border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600;
+    cursor:pointer; display:flex; align-items:center; gap:8px; transition:background 0.15s;
+  }
+  .btn-upload:hover { background:#0d47a1; }
+  .btn-upload:disabled { background:#aaa; cursor:not-allowed; }
+
+  /* GRID */
+  .img-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:16px; }
+
+  .img-card {
+    background:#fff; border-radius:12px; overflow:hidden;
+    box-shadow:0 1px 4px rgba(0,0,0,0.08); display:flex; flex-direction:column;
+    transition:box-shadow 0.15s;
+  }
+  .img-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.12); }
+  .img-thumb { width:100%; height:150px; object-fit:cover; display:block; background:#f0f2f7; }
+  .img-card-body { padding:12px; flex:1; display:flex; flex-direction:column; gap:8px; }
+  .img-filename { font-size:11px; color:var(--muted); word-break:break-all; line-height:1.5; font-family:'JetBrains Mono',monospace; }
+  .img-date { font-size:11px; color:var(--muted); }
+  .img-actions { display:flex; gap:8px; margin-top:auto; padding-top:4px; }
+  .btn-copy {
+    flex:1; background:#e3f2fd; color:var(--blue); border:none;
+    padding:7px 0; border-radius:7px; font-size:12px; font-weight:600;
+    cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.15s;
+  }
+  .btn-copy:hover { background:#bbdefb; }
+  .btn-copy.copied { background:#d1fae5; color:#065f46; }
+  .btn-del {
+    background:#fee2e2; color:var(--red2); border:none;
+    padding:7px 10px; border-radius:7px; font-size:13px;
+    cursor:pointer; transition:background 0.15s;
+  }
+  .btn-del:hover { background:#fecaca; }
+  .btn-del:disabled { opacity:0.5; cursor:not-allowed; }
+
+  /* STATES */
+  .state-box { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; color:var(--muted); gap:12px; }
+  .state-icon { font-size:52px; }
+  .state-text { font-size:15px; font-weight:500; }
+  .state-sub { font-size:13px; }
+
+  .spinner { display:inline-block; width:18px; height:18px; border:2.5px solid #e0e0e0; border-top-color:var(--blue); border-radius:50%; animation:spin 0.6s linear infinite; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* TOAST */
+  #toast { position:fixed; bottom:24px; right:24px; z-index:999; background:var(--navy); color:#fff; padding:14px 20px; border-radius:10px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,0.25); transform:translateY(80px); opacity:0; transition:all 0.3s; pointer-events:none; }
+  #toast.show { transform:translateY(0); opacity:1; }
+  #toast.success { background:var(--green); }
+  #toast.error { background:var(--red2); }
+</style>
+</head>
+<body>
+
+<div class="sidebar">
+  <div class="sidebar-brand">
+    <div class="name">🧱 Suppliable</div>
+    <div class="sub">Admin Portal</div>
+  </div>
+  <nav class="sidebar-nav">
+    <a class="nav-item" href="orders.html">📦 Orders</a>
+    <a class="nav-item" href="cod.html">💰 COD Reconciliation</a>
+    <a class="nav-item active" href="images.html">🖼️ Product Images</a>
+    <a class="nav-item" href="settings.html">⚙️ Settings</a>
+    <a class="nav-item" href="https://inventory.zoho.in" target="_blank">🔗 Open Zoho</a>
+  </nav>
+  <div class="sidebar-bottom">
+    <div class="online-indicator"><span class="online-dot"></span> Online</div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <div class="topbar-title">Product Images</div>
+    <div class="topbar-right">
+      <button class="btn-logout" onclick="logout()">Logout</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="toolbar">
+      <div class="img-count" id="imgCount"></div>
+      <div style="display:flex;gap:10px;align-items:center">
+        <input type="file" id="uploadInput" accept="image/*" style="display:none" onchange="handleUpload(this)">
+        <button class="btn-upload" id="uploadBtn" onclick="document.getElementById('uploadInput').click()">
+          + Upload Image
+        </button>
+      </div>
+    </div>
+
+    <div id="stateBox" class="state-box">
+      <span class="spinner"></span>
+      <span class="state-text">Loading images...</span>
+    </div>
+    <div class="img-grid" id="imgGrid" style="display:none"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const API_BASE = 'https://construction-api-2.onrender.com';
+const token = sessionStorage.getItem('adminToken');
+if (!token) window.location.href = 'login.html';
+
+function authHeaders() { return { 'Authorization': `Bearer ${token}` }; }
+async function apiFetch(url, opts = {}) {
+  const res = await fetch(API_BASE + url, { ...opts, headers: { ...authHeaders(), ...(opts.headers || {}) } });
+  if (res.status === 401) { window.location.href = 'login.html'; throw new Error('Unauthorized'); }
+  return res;
+}
+function logout() { sessionStorage.clear(); window.location.href = 'login.html'; }
+
+let images = [];
+
+// ── LOAD ──────────────────────────────────────────────────
+async function loadImages() {
+  try {
+    const res = await apiFetch('/api/admin/products/images');
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message);
+    images = data.data?.images || [];
+    renderGrid();
+  } catch (err) {
+    showState('⚠️', 'Failed to load images', err.message);
+  }
+}
+
+function renderGrid() {
+  const grid = document.getElementById('imgGrid');
+  const state = document.getElementById('stateBox');
+  const countEl = document.getElementById('imgCount');
+  countEl.textContent = `${images.length} image${images.length !== 1 ? 's' : ''} in Firebase Storage`;
+
+  if (!images.length) {
+    grid.style.display = 'none';
+    showState('🖼️', 'No images yet', 'Upload your first product image using the button above.');
+    return;
+  }
+
+  state.style.display = 'none';
+  grid.style.display = 'grid';
+  grid.innerHTML = images.map(img => buildCard(img)).join('');
+}
+
+function buildCard(img) {
+  const date = img.uploadedAt ? new Date(img.uploadedAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '';
+  const safeId = img.name.replace(/[^a-zA-Z0-9]/g, '_');
+  return `
+    <div class="img-card" id="card-${safeId}">
+      <img class="img-thumb" src="${img.url}" alt="${img.name}" loading="lazy"
+        onerror="this.style.background='var(--bg)';this.removeAttribute('src')">
+      <div class="img-card-body">
+        <div class="img-filename">${img.name}</div>
+        ${date ? `<div class="img-date">${date}</div>` : ''}
+        <div class="img-actions">
+          <button class="btn-copy" id="copy-${safeId}" onclick="copyUrl('${img.url}','${safeId}')">Copy URL</button>
+          <button class="btn-del" id="del-${safeId}" onclick="deleteImage('${img.name}','${safeId}')" title="Delete">🗑</button>
+        </div>
+      </div>
+    </div>`;
+}
+
+function showState(icon, text, sub = '') {
+  const box = document.getElementById('stateBox');
+  box.style.display = 'flex';
+  box.innerHTML = `<span class="state-icon">${icon}</span><span class="state-text">${text}</span>${sub ? `<span class="state-sub">${sub}</span>` : ''}`;
+}
+
+// ── UPLOAD ────────────────────────────────────────────────
+async function handleUpload(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const btn = document.getElementById('uploadBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Uploading...';
+
+  try {
+    const formData = new FormData();
+    formData.append('image', file);
+    const res = await fetch(`${API_BASE}/api/upload`, {
+      method: 'POST',
+      headers: authHeaders(),
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Upload failed');
+
+    // Extract filename from URL
+    const urlParts = data.image_url.split('/');
+    const newImage = { name: urlParts[urlParts.length - 1], url: data.image_url, uploadedAt: new Date().toISOString() };
+    images.unshift(newImage);
+    renderGrid();
+    showToast('Image uploaded!', 'success');
+  } catch (err) {
+    showToast('Upload failed: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '+ Upload Image';
+    input.value = '';
+  }
+}
+
+// ── COPY URL ──────────────────────────────────────────────
+function copyUrl(url, safeId) {
+  navigator.clipboard.writeText(url).then(() => {
+    const btn = document.getElementById('copy-' + safeId);
+    if (!btn) return;
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy URL'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ── DELETE ────────────────────────────────────────────────
+async function deleteImage(filename, safeId) {
+  if (!confirm(`Delete "${filename}" from Firebase Storage?\nThis cannot be undone.`)) return;
+  const btn = document.getElementById('del-' + safeId);
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await apiFetch(`/api/admin/products/images/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.message || 'Delete failed');
+
+    images = images.filter(img => img.name !== filename);
+    renderGrid();
+    showToast('Image deleted.', 'success');
+  } catch (err) {
+    showToast('Delete failed: ' + err.message, 'error');
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ── HELPERS ───────────────────────────────────────────────
+function showToast(msg, type = '') {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.className = ''; }, 4000);
+}
+
+// ── INIT ──────────────────────────────────────────────────
+loadImages();
+</script>
+</body>
+</html>
