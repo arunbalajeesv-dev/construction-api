@@ -34,6 +34,33 @@ function signToken(payload, expiresIn = '7d') {
   return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn });
 }
 
+function friendlyMsg91Error(err) {
+  // Timeout / network
+  if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') return 'OTP service timed out. Please try again.';
+  if (err.code === 'ENOTFOUND' || err.code === 'ECONNREFUSED') return 'OTP service unreachable. Please try again.';
+  // MSG91 body errors (assertSuccess threw these)
+  const code = err.msg91Code;
+  const raw = (err.message || '').toLowerCase();
+  if (code === 418) return 'OTP template misconfigured. Please contact support.';
+  if (code === 401 || raw.includes('authkey') || raw.includes('authentication')) return 'OTP service authentication error. Please contact support.';
+  if (raw.includes('mobile') || raw.includes('number')) return 'Phone number not accepted by OTP service.';
+  if (raw.includes('balance') || raw.includes('credit')) return 'OTP service quota exhausted. Please contact support.';
+  // HTTP-level errors from axios
+  const httpStatus = err.response?.status;
+  if (httpStatus === 401 || httpStatus === 403) return 'OTP service authentication error. Please contact support.';
+  if (httpStatus === 429) return 'OTP service rate limit reached. Please wait and try again.';
+  if (httpStatus >= 500) return 'OTP service is temporarily unavailable. Please try again.';
+  return 'Unable to send OTP. Please try again.';
+}
+
+function logMsg91Failure(context, err, maskedPhone) {
+  const httpStatus = err.response?.status ?? 200;
+  const body = err.msg91Body ?? err.response?.data ?? err.message;
+  // Never log authkey — scrub it from any stringified output
+  const safeBody = JSON.stringify(body).replace(new RegExp(process.env.MSG91_AUTH_KEY || '__none__', 'g'), '***');
+  console.error(`[AUTH] msg91 failure (${context}): httpStatus=${httpStatus} body=${safeBody} phone=${maskedPhone}`);
+}
+
 function generateUserId() {
   return 'usr_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
 }
@@ -61,16 +88,17 @@ async function sendOtp(req, res) {
     return res.status(err.status || 429).json({ success: false, message: err.message });
   }
 
-  console.log(`[AUTH] send otp request phone=***${normalized.slice(-4)}`);
+  const maskedPhone = `***${normalized.slice(-4)}`;
+  console.log(`[AUTH] send otp request phone=${maskedPhone}`);
 
   try {
     await msg91.sendOtp(normalized);
     recordOtpSend(normalized);
-    console.log(`[AUTH] otp sent phone=***${normalized.slice(-4)}`);
+    console.log(`[AUTH] otp sent phone=${maskedPhone}`);
     return res.json({ success: true, message: 'OTP sent successfully' });
   } catch (err) {
-    console.error('[AUTH] msg91 failure (send):', err.response?.data || err.message);
-    return res.status(500).json({ success: false, message: 'Unable to send OTP' });
+    logMsg91Failure('send', err, maskedPhone);
+    return res.status(502).json({ success: false, message: friendlyMsg91Error(err) });
   }
 }
 
@@ -140,15 +168,16 @@ async function resendOtp(req, res) {
 
   const normalized = normalizePhone(phone);
 
-  console.log(`[AUTH] resend otp request phone=***${normalized.slice(-4)}`);
+  const maskedPhone = `***${normalized.slice(-4)}`;
+  console.log(`[AUTH] resend otp request phone=${maskedPhone}`);
 
   try {
     await msg91.resendOtp(normalized);
     recordOtpSend(normalized);
     return res.json({ success: true, message: 'OTP resent successfully' });
   } catch (err) {
-    console.error('[AUTH] msg91 failure (resend):', err.response?.data || err.message);
-    return res.status(500).json({ success: false, message: 'Unable to resend OTP' });
+    logMsg91Failure('resend', err, maskedPhone);
+    return res.status(502).json({ success: false, message: friendlyMsg91Error(err) });
   }
 }
 
