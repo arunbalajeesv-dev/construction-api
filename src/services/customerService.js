@@ -1,10 +1,12 @@
-const { getCustomer, saveCustomer, getCustomerByPhone } = require('./firestoreService');
+const { getCustomer, saveCustomer } = require('./firestoreService');
 const { createZohoContact, updateZohoContact } = require('./zohoService');
 const logger = require('../utils/logger');
+const { normalizePhone } = require('../utils/phone');
 
-async function syncCustomer(userId, phone, name, is_business, business_name, gstin, registered_address) {
-  console.log('syncCustomer called with:', { userId, phone, name, is_business, business_name, gstin });
-  const existing = await getCustomer(userId);
+async function syncCustomer(userId, phone, name, is_business, business_name, gstin, registered_address, traceContext = null) {
+  const normalizedPhone = normalizePhone(phone) || phone;
+  logger.debug({ userId, name, is_business }, 'syncCustomer called');
+  const existing = await getCustomer(userId, traceContext);
   if (existing) {
     let hasChanges = false;
 
@@ -30,7 +32,7 @@ async function syncCustomer(userId, phone, name, is_business, business_name, gst
     }
 
     if (hasChanges) {
-      await saveCustomer(existing);
+      await saveCustomer(existing, traceContext);
       if (existing.zoho_contact_id) {
         await updateZohoContact(existing.zoho_contact_id, {
           name,
@@ -45,11 +47,11 @@ async function syncCustomer(userId, phone, name, is_business, business_name, gst
     return existing;
   }
 
-  const zohoContact = await createZohoContact({ phone, name, is_business, business_name, gstin, registered_address }, traceContext);
+  const zohoContact = await createZohoContact({ phone: normalizedPhone, name, is_business, business_name, gstin, registered_address }, traceContext);
 
   return await saveCustomer({
     userId,
-    phone,
+    phone: normalizedPhone,
     name: name || '',
     is_business: is_business || false,
     business_name: business_name || '',
@@ -57,7 +59,7 @@ async function syncCustomer(userId, phone, name, is_business, business_name, gst
     zoho_contact_id: zohoContact.contact_id,
     delivery_address: null,
     registered_address: registered_address || null
-  });
+  }, traceContext);
 }
 
 module.exports = { syncCustomer };

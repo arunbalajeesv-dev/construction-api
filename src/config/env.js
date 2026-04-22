@@ -23,8 +23,13 @@ const schema = z.object({
 
   ADMIN_PASSWORD: z.string().min(8, 'ADMIN_PASSWORD must be at least 8 characters'),
   ADMIN_TOKEN: z.string().min(16, 'ADMIN_TOKEN must be at least 16 characters'),
+  JWT_SECRET: z.string().min(6, 'JWT_SECRET must be at least 6 characters'),
 
   // Optional
+  GRAFANA_USER: z.string().optional(),
+  GRAFANA_API_KEY: z.string().optional(),
+  OTLP_ENDPOINT: z.string().url().optional(),
+
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   WAREHOUSE_LAT: z.coerce.number().optional(),
   WAREHOUSE_LNG: z.coerce.number().optional(),
@@ -39,7 +44,7 @@ if (!result.success) {
   const errors = result.error.issues
     .map(issue => `  ${issue.path.join('.')}: ${issue.message}`)
     .join('\n');
-  // Intentional console.error — logger is not yet initialised at this point
+  // eslint-disable-next-line no-console -- logger is not yet initialised at this point
   console.error(`[Config] Environment validation failed:\n${errors}`);
   process.exit(1);
 }

@@ -6,5 +6,7 @@ services:
     env_file:
       - .env.local
     environment:
-      NODE_ENV: development
+      OTEL_SERVICE_NAME: construction-api
+    volumes:
+      - /Users/murali/.config/suppliable/dev/firebase/suppliable-app-firebase-sa.json:/run/secrets/firebase-sa.json:ro
     restart: unless-stopped

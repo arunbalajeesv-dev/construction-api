@@ -2,19 +2,7 @@
 
 const { formatTimestamps } = require('../utils/formatDoc');
 
-const STATUS_LABELS = {
-  pending_payment: 'Awaiting Payment',
-  payment_confirmed: 'Payment Confirmed',
-  warehouse_review: 'Order Placed',
-  accepted: 'Order Accepted',
-  packing: 'Order Accepted',
-  ready_for_dispatch: 'Ready for Pickup',
-  loading: 'Loading into Vehicle',
-  out_for_delivery: 'Out for Delivery',
-  arrived: 'Driver has Arrived',
-  delivered: 'Delivered',
-  declined: 'Order Cancelled',
-};
+const { ORDER_STATUS_LABELS: STATUS_LABELS } = require('../constants');
 
 /**
  * Maps a raw Firestore order document to a typed customer-facing shape.

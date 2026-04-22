@@ -4,6 +4,8 @@ const {
   getZohoCategories
 } = require('./zohoService');
 const { getImageMap } = require('./firestoreService');
+const remoteConfig = require('./remoteConfigService');
+const { withSpan } = require('../utils/spanTracer');
 
 // Extract GST from Zoho item tax preferences
 const extractGST = (item) => {
@@ -19,52 +21,56 @@ const extractGST = (item) => {
 const buildImage = (name, imageUrl) =>
   imageUrl || 'https://placehold.co/400x300/png';
 
-// In-memory cache
+const toNumberOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+};
+
+// In-memory cache. ttlMs is seeded with the default and updated from Remote Config on each miss.
 const cache = {
   products: null,
   groups: null,
   categoryMap: null,
   imageMap: null,
   lastFetched: null,
-  TTL: 10 * 60 * 1000 // 10 minutes
+  ttlMs: 10 * 60 * 1000,
 };
 
-function isCacheValid() {
-  return cache.lastFetched && (Date.now() - cache.lastFetched) < cache.TTL;
-}
-
 async function fetchZohoData(traceContext = null) {
-  if (isCacheValid()) {
-    return { items: cache.products, groups: cache.groups, categoryMap: cache.categoryMap };
-  }
-  const [items, groups, zohoCategories] = await Promise.all([
-    getZohoProducts(traceContext),
-    getZohoItemGroups(traceContext),
-    getZohoCategories(traceContext)
-  ]);
-
-  // Build category id → name map
-  const categoryMap = {};
-  zohoCategories.forEach(c => { categoryMap[c.category_id] = c.name; });
-
-  // Build imageMap from Zoho items (custom_field_hash if available)
-  const imageMap = {};
-  items.forEach(item => {
-    if (item.custom_field_hash?.cf_image_url) {
-      imageMap[item.item_id] = item.custom_field_hash.cf_image_url;
+  const cacheHit = !!(cache.lastFetched && (Date.now() - cache.lastFetched) < cache.ttlMs);
+  return withSpan(traceContext, 'products.fetchZohoData', { 'cache.hit': cacheHit }, async () => {
+    if (cacheHit) {
+      return { items: cache.products, groups: cache.groups, categoryMap: cache.categoryMap };
     }
+    const [items, groups, zohoCategories, ttlMinutes] = await Promise.all([
+      getZohoProducts(traceContext),
+      getZohoItemGroups(traceContext),
+      getZohoCategories(traceContext),
+      remoteConfig.getNumber('product_cache_ttl_minutes', 10),
+    ]);
+
+    const categoryMap = {};
+    zohoCategories.forEach(c => { categoryMap[c.category_id] = c.name; });
+
+    const imageMap = {};
+    items.forEach(item => {
+      if (item.custom_field_hash?.cf_image_url) {
+        imageMap[item.item_id] = item.custom_field_hash.cf_image_url;
+      }
+    });
+
+    const firestoreImages = await getImageMap(traceContext);
+    const mergedImageMap = { ...imageMap, ...firestoreImages };
+
+    cache.products = items;
+    cache.groups = groups;
+    cache.categoryMap = categoryMap;
+    cache.imageMap = mergedImageMap;
+    cache.ttlMs = ttlMinutes * 60 * 1000;
+    cache.lastFetched = Date.now();
+    return { items, groups, categoryMap };
   });
-
-  // Merge with Firestore imageMap (Firestore values take precedence)
-  const firestoreImages = await getImageMap();
-  const mergedImageMap = { ...imageMap, ...firestoreImages };
-
-  cache.products = items;
-  cache.groups = groups;
-  cache.categoryMap = categoryMap;
-  cache.imageMap = mergedImageMap;
-  cache.lastFetched = Date.now();
-  return { items, groups, categoryMap };
 }
 
 function clearCache() {
@@ -96,11 +102,28 @@ async function getAllProducts(category = null, traceContext = null) {
   // Build grouped products — NO extra API calls
   const groupedProducts = groups.map(group => {
     const variants = group.items.map(v => ({
-      id: v.item_id,
-      name: v.attribute_option_name1 || v.name,
-      price: v.rate,
-      stock: v.stock_on_hand || 0,
-      available_stock: v.available_stock || v.actual_available_stock || 0
+      // Item-group variants often omit available_stock. Fall back to the full
+      // item record so cart validation doesn't treat valid items as 0 stock.
+      ...(function () {
+        const full = itemMap[v.item_id] || {};
+        const stockOnHand =
+          toNumberOrNull(v.stock_on_hand) ??
+          toNumberOrNull(full.stock_on_hand) ??
+          0;
+        const availableStock =
+          toNumberOrNull(v.available_stock) ??
+          toNumberOrNull(v.actual_available_stock) ??
+          toNumberOrNull(full.available_stock) ??
+          toNumberOrNull(full.actual_available_stock) ??
+          stockOnHand;
+        return {
+          id: v.item_id,
+          name: v.attribute_option_name1 || v.name,
+          price: toNumberOrNull(v.rate) ?? 0,
+          stock: stockOnHand,
+          available_stock: availableStock,
+        };
+      }())
     }));
 
     const prices = variants.map(v => v.price);
@@ -208,6 +231,16 @@ const getProductById = async (id, traceContext = null) => {
     const variant = group.items.find(v => v.item_id === id);
     if (variant) {
       const fullItem = items.find(i => i.item_id === id);
+      const stockOnHand =
+        toNumberOrNull(variant.stock_on_hand) ??
+        toNumberOrNull(fullItem?.stock_on_hand) ??
+        0;
+      const availableStock =
+        toNumberOrNull(variant.available_stock) ??
+        toNumberOrNull(variant.actual_available_stock) ??
+        toNumberOrNull(fullItem?.available_stock) ??
+        toNumberOrNull(fullItem?.actual_available_stock) ??
+        stockOnHand;
       return {
         id: variant.item_id,
         name: `${group.group_name} ${variant.attribute_option_name1 || ''}`.trim(),
@@ -216,9 +249,9 @@ const getProductById = async (id, traceContext = null) => {
         unit: group.unit,
         description: group.description || '',
         hasVariants: false,
-        price: variant.rate,
-        stock: variant.stock_on_hand || 0,
-        available_stock: variant.available_stock || variant.actual_available_stock || 0,
+        price: toNumberOrNull(variant.rate) ?? 0,
+        stock: stockOnHand,
+        available_stock: availableStock,
         gst_percentage: fullItem ? extractGST(fullItem) : (variant.tax_percentage || extractGST(group)),
         hsn: fullItem?.hsn_or_sac || group.hsn_or_sac || '',
         image: cache.imageMap[id] || buildImage(group.group_name),
