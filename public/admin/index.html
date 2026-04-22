@@ -34,6 +34,19 @@
     .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #ccc; border-top-color: #0066cc; border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .page-title { font-size: 22px; font-weight: 600; margin-bottom: 20px; color: #1a1a2e; }
+    .section-title { font-size: 17px; font-weight: 600; margin: 32px 0 14px; color: #1a1a2e; display:flex; align-items:center; gap:8px; }
+    .img-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px,1fr)); gap: 14px; }
+    .img-card { background: #fff; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.08); overflow:hidden; display:flex; flex-direction:column; }
+    .img-card img { width:100%; height:120px; object-fit:cover; display:block; background:#eee; }
+    .img-card-body { padding:10px; flex:1; display:flex; flex-direction:column; gap:6px; }
+    .img-filename { font-size:11px; color:#666; word-break:break-all; line-height:1.4; }
+    .img-actions { display:flex; gap:6px; margin-top:auto; }
+    .btn-copy { flex:1; background:#e8f4ff; color:#0066cc; border:none; padding:6px 0; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; }
+    .btn-copy:hover { background:#cce5ff; }
+    .btn-del { background:#fde8e8; color:#c0392b; border:none; padding:6px 8px; border-radius:6px; font-size:12px; cursor:pointer; }
+    .btn-del:hover { background:#fbc8c8; }
+    .grid-empty { color:#999; font-size:14px; padding: 20px 0; }
+    .grid-loading { color:#999; font-size:14px; padding:20px 0; display:flex; align-items:center; gap:8px; }
   </style>
 </head>
 <body>
@@ -57,6 +70,12 @@
         <tbody id="product-list"></tbody>
       </table>
     </div>
+
+    <!-- IMAGES GRID SECTION -->
+    <div class="section-title">🖼️ Uploaded Images in Firebase Storage</div>
+    <div id="img-grid-loading" class="grid-loading"><span class="spinner"></span>Loading images...</div>
+    <div class="img-grid" id="imgGrid" style="display:none"></div>
+    <div id="img-grid-empty" class="grid-empty" style="display:none">No images yet</div>
   </div>
 
   <script>
@@ -146,6 +165,9 @@
         document.getElementById(`remove-btn-${productId}`).style.display = 'inline-block';
         badge.innerHTML = '<span class="badge badge-success">✓ Updated!</span>';
         setTimeout(() => badge.innerHTML = '', 3000);
+        // Add newly uploaded image to the storage grid
+        const urlParts = uploadData.image_url.split('/');
+        addImageToGrid(uploadData.image_url, urlParts[urlParts.length - 1]);
       } catch (err) {
         badge.innerHTML = '<span class="badge badge-error">✗ Failed</span>';
         setTimeout(() => badge.innerHTML = '', 3000);
@@ -191,6 +213,96 @@
     }
 
     loadProducts();
+    loadStorageImages();
+
+    // ---- STORAGE IMAGES ----
+    const adminToken = sessionStorage.getItem('adminToken');
+
+    async function loadStorageImages() {
+      const loading = document.getElementById('img-grid-loading');
+      const grid = document.getElementById('imgGrid');
+      const empty = document.getElementById('img-grid-empty');
+      if (!adminToken) {
+        loading.textContent = 'Log in to the admin dashboard to view uploaded images.';
+        return;
+      }
+      try {
+        const res = await fetch(`${BASE_URL}/api/admin/products/images`, {
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const images = data.data?.images || [];
+        loading.style.display = 'none';
+        if (!images.length) { empty.style.display = ''; return; }
+        grid.style.display = 'grid';
+        renderImageGrid(images);
+      } catch (err) {
+        loading.textContent = 'Could not load images: ' + err.message;
+      }
+    }
+
+    function renderImageGrid(images) {
+      const grid = document.getElementById('imgGrid');
+      grid.innerHTML = images.map(img => `
+        <div class="img-card" id="imgcard-${CSS.escape(img.name)}">
+          <img src="${img.url}" alt="${img.name}" loading="lazy" onerror="this.style.background='#eee';this.style.height='120px'">
+          <div class="img-card-body">
+            <div class="img-filename">${img.name}</div>
+            <div class="img-actions">
+              <button class="btn-copy" onclick="copyUrl('${img.url}', this)">Copy URL</button>
+              <button class="btn-del" onclick="deleteImage('${img.name}', this)" title="Delete">🗑</button>
+            </div>
+          </div>
+        </div>`).join('');
+    }
+
+    function addImageToGrid(url, name) {
+      const grid = document.getElementById('imgGrid');
+      const empty = document.getElementById('img-grid-empty');
+      empty.style.display = 'none';
+      grid.style.display = 'grid';
+      const card = document.createElement('div');
+      card.className = 'img-card';
+      card.id = 'imgcard-' + CSS.escape(name);
+      card.innerHTML = `
+        <img src="${url}" alt="${name}" loading="lazy">
+        <div class="img-card-body">
+          <div class="img-filename">${name}</div>
+          <div class="img-actions">
+            <button class="btn-copy" onclick="copyUrl('${url}', this)">Copy URL</button>
+            <button class="btn-del" onclick="deleteImage('${name}', this)" title="Delete">🗑</button>
+          </div>
+        </div>`;
+      grid.prepend(card);
+    }
+
+    function copyUrl(url, btn) {
+      navigator.clipboard.writeText(url).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = orig, 1500);
+      });
+    }
+
+    async function deleteImage(name, btn) {
+      if (!confirm('Delete this image from Firebase Storage?')) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`${BASE_URL}/api/admin/products/images/${encodeURIComponent(name)}`, {
+          method: 'DELETE',
+          headers: { Authorization: `Bearer ${adminToken}` }
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('imgcard-' + CSS.escape(name))?.remove();
+          if (!document.getElementById('imgGrid').children.length) {
+            document.getElementById('imgGrid').style.display = 'none';
+            document.getElementById('img-grid-empty').style.display = '';
+          }
+        } else { alert(data.message || 'Delete failed'); btn.disabled = false; }
+      } catch (err) { alert('Error: ' + err.message); btn.disabled = false; }
+    }
   </script>
 </body>
 </html>

@@ -13,13 +13,17 @@ const {
   fixInvoice,
   getPendingCOD,
   reconcileCOD,
+  listHandovers,
+  confirmHandover,
+  listCodHistory,
   listVehicles,
   createVehicle,
   removeVehicle,
   listDrivers,
   createDriver,
   removeDriver,
-  setDriverPin
+  setDriverPin,
+  toggleFeatured
 } = require('../controllers/adminController');
 
 // Auth — no middleware on this route
@@ -45,6 +49,9 @@ router.use((req, res, next) => {
 router.get('/orders/new-count', getNewOrderCount);
 router.get('/cod/pending', getPendingCOD);
 router.post('/cod/:orderId/reconcile', reconcileCOD);
+router.get('/cod/handovers', listHandovers);
+router.post('/cod/confirm-handover/:handoverId', confirmHandover);
+router.get('/cod/history', listCodHistory);
 
 // Order list and detail
 router.get('/orders', listOrders);
@@ -58,6 +65,9 @@ router.post('/orders/:orderId/assign-vehicle', assignVehicle);
 router.get('/orders/:orderId/picking-list', getPickingList);
 router.get('/orders/:orderId/invoice-url', getInvoiceUrl);
 router.post('/orders/:orderId/fix-invoice', fixInvoice);
+
+// Product management
+router.put('/products/:id/featured', toggleFeatured);
 
 // Vehicles
 router.get('/vehicles', listVehicles);

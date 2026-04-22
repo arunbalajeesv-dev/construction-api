@@ -22,11 +22,19 @@ async function getAccessToken() {
 
 async function getZohoProducts() {
   const token = await getAccessToken();
-  const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    params: { organization_id: process.env.ZOHO_ORG_ID }
-  });
-  return response.data.items;
+  const allItems = [];
+  let page = 1;
+  while (true) {
+    const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID, per_page: 200, page }
+    });
+    const items = response.data.items || [];
+    allItems.push(...items);
+    if (!response.data.page_context?.has_more_page) break;
+    page++;
+  }
+  return allItems;
 }
 
 async function getZohoCategories() {
@@ -35,7 +43,7 @@ async function getZohoCategories() {
     headers: { Authorization: `Zoho-oauthtoken ${token}` },
     params: { organization_id: process.env.ZOHO_ORG_ID }
   });
-  return (response.data.categories || []).filter(c => c.category_id !== '-1' && c.has_active_items);
+  return (response.data.categories || []).filter(c => c.category_id !== '-1');
 }
 
 async function getZohoProductById(itemId) {
@@ -49,11 +57,19 @@ async function getZohoProductById(itemId) {
 
 async function getZohoItemGroups() {
   const token = await getAccessToken();
-  const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/itemgroups`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    params: { organization_id: process.env.ZOHO_ORG_ID }
-  });
-  return response.data.itemgroups;
+  const allGroups = [];
+  let page = 1;
+  while (true) {
+    const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/itemgroups`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID, per_page: 200, page }
+    });
+    const groups = response.data.itemgroups || [];
+    allGroups.push(...groups);
+    if (!response.data.page_context?.has_more_page) break;
+    page++;
+  }
+  return allGroups;
 }
 
 async function getZohoItemGroupById(groupId) {
@@ -143,6 +159,17 @@ async function updateZohoItemImage(itemId, imageUrl) {
   return response.data.item;
 }
 
+async function updateZohoItemFeatured(itemId, featured) {
+  const token = await getAccessToken();
+  const response = await axios.put(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items/${itemId}`, {
+    custom_fields: [{ label: 'Featured', value: featured }]
+  }, {
+    headers: { Authorization: `Zoho-oauthtoken ${token}` },
+    params: { organization_id: process.env.ZOHO_ORG_ID }
+  });
+  return response.data.item;
+}
+
 async function updateZohoContact(zohoContactId, contactData) {
   console.log('updateZohoContact called with:', { zohoContactId, contactData });
   const token = await getAccessToken();
@@ -200,5 +227,6 @@ module.exports = {
   createZohoContact,
   updateZohoContact,
   updateZohoItemImage,
+  updateZohoItemFeatured,
   searchZohoContactByPhone
 };

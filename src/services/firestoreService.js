@@ -9,7 +9,8 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 
 if (!admin.apps.length) {
   admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert(serviceAccount),
+    storageBucket: (process.env.FIREBASE_STORAGE_BUCKET || '').trim().replace(/^gs:\/\//, '')
   });
 }
 
@@ -55,6 +56,13 @@ async function getImageMap() {
 async function setImage(itemId, imageUrl) {
   await db.collection('config').doc('imageMap').set(
     { [itemId]: imageUrl },
+    { merge: true }
+  );
+}
+
+async function setFeatured(itemId, featured) {
+  await db.collection('config').doc('imageMap').set(
+    { [`featured_${itemId}`]: featured },
     { merge: true }
   );
 }
@@ -158,6 +166,37 @@ async function getAddressById(addressId) {
   const doc = await db.collection('addresses').doc(addressId).get();
   if (!doc.exists) return null;
   return doc.data();
+}
+
+// COD HANDOVERS
+async function createHandover(handoverData) {
+  await db.collection('codHandovers').doc(handoverData.handoverId).set(handoverData);
+  return handoverData;
+}
+
+async function getHandoversByDriver(driverId, date) {
+  const snap = await db.collection('codHandovers')
+    .where('driverId', '==', driverId)
+    .where('date', '==', date)
+    .get();
+  return snap.docs.map(d => d.data());
+}
+
+async function getAllHandovers(status) {
+  const snap = await db.collection('codHandovers').orderBy('createdAt', 'desc').get();
+  let handovers = snap.docs.map(d => d.data());
+  if (status) handovers = handovers.filter(h => h.status === status);
+  return handovers;
+}
+
+async function getHandoverById(handoverId) {
+  const doc = await db.collection('codHandovers').doc(handoverId).get();
+  return doc.exists ? doc.data() : null;
+}
+
+async function updateHandover(handoverId, updates) {
+  await db.collection('codHandovers').doc(handoverId).update(updates);
+  return { ...updates, handoverId };
 }
 
 // APP SETTINGS
@@ -266,6 +305,14 @@ async function getDriverByToken(token) {
   return { driverId: snapshot.docs[0].id, ...snapshot.docs[0].data() };
 }
 
+async function getAllHandoversForDriver(driverId) {
+  const snap = await db.collection('codHandovers')
+    .where('driverId', '==', driverId)
+    .get();
+  const docs = snap.docs.map(d => d.data());
+  return docs.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+}
+
 async function getOrdersByDriver(driverId, startISO, endISO) {
   let q = db.collection('orders').where('driverId', '==', driverId);
   if (startISO) q = q.where('assignedAt', '>=', startISO);
@@ -278,12 +325,18 @@ async function getOrdersByDriver(driverId, startISO, endISO) {
 module.exports = {
   db,
   getCustomer,
+  createHandover,
+  getHandoversByDriver,
+  getAllHandovers,
+  getHandoverById,
+  updateHandover,
   saveCustomer,
   getCustomerByPhone,
   getCart,
   saveCart,
   getImageMap,
   setImage,
+  setFeatured,
   getAddresses,
   addAddress,
   updateAddress,
@@ -311,5 +364,6 @@ module.exports = {
   getDriverById,
   getDriverByPhone,
   getDriverByToken,
-  getOrdersByDriver
+  getOrdersByDriver,
+  getAllHandoversForDriver
 };

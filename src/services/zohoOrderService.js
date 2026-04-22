@@ -72,4 +72,16 @@ async function updateZohoShipment(salesorder_id) {
   return response.data;
 }
 
-module.exports = { createZohoSalesOrder, confirmZohoSalesOrder, createZohoInvoiceFromSO, updateZohoShipment };
+async function updateZohoSOOrderId(salesorder_id, orderId) {
+  const token = await getAccessToken();
+  await axios.put(
+    `${process.env.ZOHO_API_DOMAIN}/inventory/v1/salesorders/${salesorder_id}`,
+    { custom_fields: [{ label: 'Suppliable Order ID', value: orderId }] },
+    {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID }
+    }
+  );
+}
+
+module.exports = { createZohoSalesOrder, confirmZohoSalesOrder, createZohoInvoiceFromSO, updateZohoShipment, updateZohoSOOrderId };

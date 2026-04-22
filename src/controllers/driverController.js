@@ -1,8 +1,8 @@
 const multer = require('multer');
 const bcrypt = require('bcrypt');
-const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getOrdersByDriver } = require('../services/firestoreService');
+const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getVehicleById, getOrdersByDriver, createHandover, getHandoversByDriver, getAllHandoversForDriver } = require('../services/firestoreService');
 const { getETA } = require('../services/googleMapsService');
-const { uploadImage } = require('../services/cloudinaryService');
+const { uploadToFirebase } = require('../services/storageService');
 const { updateZohoShipment } = require('../services/zohoOrderService');
 const { formatTimestamps } = require('../utils/formatDoc');
 
@@ -165,9 +165,7 @@ const completeDelivery = [
       }
 
       if (!req.file) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'photo is required' });
-      const base64 = req.file.buffer.toString('base64');
-      const dataUri = `data:${req.file.mimetype};base64,${base64}`;
-      const deliveryPhotoUrl = await uploadImage(dataUri);
+      const deliveryPhotoUrl = await uploadToFirebase(req.file.buffer, req.file.mimetype, 'deliveries');
 
       const updated = await updateOrder(orderId, {
         status: 'delivered',
@@ -182,8 +180,24 @@ const completeDelivery = [
         });
       }
 
-      if (order.vehicleId) updateVehicle(order.vehicleId, { isAvailable: true }).catch(() => {});
-      if (order.driverId) updateDriver(order.driverId, { isAvailable: true }).catch(() => {});
+      if (order.vehicleId) {
+        (async () => {
+          try {
+            const v = await getVehicleById(order.vehicleId);
+            const newCount = Math.max(0, (v?.activeOrderCount ?? 1) - 1);
+            await updateVehicle(order.vehicleId, { isAvailable: newCount < 2, activeOrderCount: newCount });
+          } catch (e) { console.error('Vehicle count decrement failed:', e.message); }
+        })();
+      }
+      if (order.driverId) {
+        (async () => {
+          try {
+            const d = await getDriverById(order.driverId);
+            const newCount = Math.max(0, (d?.activeOrderCount ?? 1) - 1);
+            await updateDriver(order.driverId, { isAvailable: newCount < 2, activeOrderCount: newCount });
+          } catch (e) { console.error('Driver count decrement failed:', e.message); }
+        })();
+      }
 
       res.json({ success: true, data: { order: formatTimestamps(updated) } });
     } catch (err) {
@@ -203,16 +217,15 @@ const STATUS_LABELS = {
 };
 
 // GET /api/driver/orders/today
+// Note: endpoint name kept for Flutter compatibility — now returns ALL incomplete
+// orders (status not delivered/declined), not just today's
 const getTodayOrders = async (req, res) => {
   try {
     const { driverId } = req.driver;
     const allOrders = await getOrdersByDriver(driverId, null, null);
 
-    const todayIST = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0];
-    const todayOrders = allOrders.filter(o => {
-      if (!o.assignedAt) return false;
-      return new Date(o.assignedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0] === todayIST;
-    });
+    const DONE = ['delivered', 'declined'];
+    const todayOrders = allOrders.filter(o => !DONE.includes(o.status));
 
     todayOrders.sort((a, b) => (a.assignedAt || '').localeCompare(b.assignedAt || ''));
 
@@ -236,12 +249,12 @@ const getTodayOrders = async (req, res) => {
         },
         items: (o.items || []).map(i => ({ productName: i.productName || i.name, quantity: i.quantity, unit: i.unit || '' })),
         itemCount: (o.items || []).length,
-        grandTotal: o.grandTotal || 0,
-        deliveryCharge: o.deliveryCharge || 0,
+        grandTotal: o.grand_total ?? o.grandTotal ?? 0,
+        deliveryCharge: o.delivery_charge ?? o.deliveryCharge ?? 0,
         paymentType: o.paymentType || '',
         paymentStatus: o.paymentStatus || '',
         codCollected: o.codCollectedByDriver || false,
-        codAmountToCollect: o.paymentType === 'COD' ? (o.grandTotal || 0) : 0,
+        codAmountToCollect: o.paymentType === 'COD' ? (o.grand_total ?? o.grandTotal ?? 0) : 0,
         assignedAt: o.assignedAt || null
       };
     }));
@@ -372,16 +385,16 @@ const getDriverOrderDetail = async (req, res) => {
             quantity: i.quantity,
             unit: i.unit || '',
             unitPrice: i.unitPrice || i.price || 0,
-            itemTotal: i.itemTotal || i.totalPrice || 0
+            itemTotal: i.grandTotal || i.itemTotal || i.totalPrice || 0
           })),
-          grandTotal: order.grandTotal || 0,
-          subtotal: order.subtotal || order.totalWithoutGST || 0,
-          gstTotal: order.gstTotal || order.totalGST || 0,
-          deliveryCharge: order.deliveryCharge || 0,
+          grandTotal: order.grand_total ?? order.grandTotal ?? 0,
+          subtotal: order.subtotal ?? order.totalWithoutGST ?? 0,
+          gstTotal: order.gst_total ?? order.gstTotal ?? order.totalGST ?? 0,
+          deliveryCharge: order.delivery_charge ?? order.deliveryCharge ?? 0,
           paymentType: order.paymentType || '',
           paymentStatus: order.paymentStatus || '',
           codCollected: order.codCollectedByDriver || false,
-          codAmountToCollect: order.paymentType === 'COD' ? (order.grandTotal || 0) : 0,
+          codAmountToCollect: order.paymentType === 'COD' ? (order.grand_total ?? order.grandTotal ?? 0) : 0,
           deliveryOtp: order.status === 'arrived' ? order.deliveryOtp : null,
           assignedAt: order.assignedAt || null,
           acceptedAt: order.acceptedAt || null
@@ -393,4 +406,134 @@ const getDriverOrderDetail = async (req, res) => {
   }
 };
 
-module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus };
+// GET /api/driver/cod/history
+const getDriverCodHistory = async (req, res) => {
+  try {
+    const { driverId } = req.driver;
+    const { date, orderId } = req.query;
+
+    const [allOrders, handovers] = await Promise.all([
+      getOrdersByDriver(driverId, null, null),
+      getAllHandoversForDriver(driverId)
+    ]);
+
+    const orderRecords = allOrders
+      .filter(o => o.paymentType === 'COD' && o.status === 'delivered')
+      .map(o => ({
+        type: 'order',
+        orderId: o.orderId,
+        amount: o.codAmountCollected || o.codAmount || 0,
+        status: o.codCollected ? 'reconciled' : 'delivered',
+        date: (o.reconciledAt || o.deliveredAt || '').slice(0, 10),
+        createdAt: o.reconciledAt || o.deliveredAt || o.createdAt
+      }));
+
+    const handoverRecords = handovers.map(h => ({
+      type: 'handover',
+      handoverId: h.handoverId,
+      amount: h.totalAmount,
+      status: h.status,
+      date: h.date,
+      notes: h.notes || '',
+      createdAt: h.createdAt
+    }));
+
+    let records = [...orderRecords, ...handoverRecords];
+    if (orderId) records = records.filter(r => r.orderId === orderId);
+    if (date) records = records.filter(r => r.date === date);
+    records.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    res.json({ success: true, data: { count: records.length, records } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+// GET /api/driver/cod/summary
+const getCodSummary = async (req, res) => {
+  try {
+    const { driverId } = req.driver;
+    const allOrders = await getOrdersByDriver(driverId, null, null);
+
+    const todayIST = new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0];
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+    const todayOrders = allOrders.filter(o => {
+      if (!o.assignedAt) return false;
+      return new Date(o.assignedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }).split(',')[0] === todayIST;
+    });
+
+    const codOrders = todayOrders.filter(o =>
+      o.status === 'delivered' && o.paymentType === 'COD'
+    );
+
+    const totalCodCollected = codOrders.reduce((sum, o) => sum + (o.codAmountCollected || 0), 0);
+
+    const existing = await getHandoversByDriver(driverId, todayStr);
+    const handoverStatus = existing.length > 0 ? 'completed' : 'pending';
+
+    res.json({
+      success: true,
+      data: {
+        date: todayStr,
+        totalOrders: todayOrders.length,
+        codOrders: codOrders.length,
+        totalCodCollected,
+        handoverStatus,
+        orders: codOrders.map(o => ({
+          orderId: o.orderId,
+          customerName: o.customerName || '',
+          amountCollected: o.codAmountCollected || 0,
+          deliveredAt: o.deliveredAt || null
+        }))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+// POST /api/driver/cod/handover
+const submitHandover = async (req, res) => {
+  try {
+    const { driverId, name: driverName } = req.driver;
+    const { totalAmount, notes } = req.body;
+
+    if (totalAmount === undefined || totalAmount === null || typeof totalAmount !== 'number' || totalAmount <= 0) {
+      return res.status(400).json({ error: 'INVALID_AMOUNT', message: 'totalAmount must be a positive number' });
+    }
+
+    const todayStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const existing = await getHandoversByDriver(driverId, todayStr);
+    if (existing.length > 0) {
+      return res.status(400).json({ error: 'HANDOVER_EXISTS', message: 'Handover already submitted for today' });
+    }
+
+    const handover = {
+      handoverId: 'HO' + Date.now(),
+      driverId,
+      driverName,
+      totalAmount,
+      notes: notes || '',
+      date: todayStr,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+
+    await createHandover(handover);
+
+    res.json({
+      success: true,
+      data: {
+        handoverId: handover.handoverId,
+        totalAmount: handover.totalAmount,
+        status: handover.status,
+        message: 'Handover submitted. Warehouse will confirm receipt.'
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
+module.exports = { driverAuth, loadingComplete, getEta, arrived, codCollected, completeDelivery, getTodayOrders, getDriverOrderDetail, getDriverProfile, updateDriverStatus, getCodSummary, submitHandover, getDriverCodHistory };
