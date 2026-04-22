@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const morgan = require('morgan');
 const dotenv = require('dotenv');
 const path = require('path');
@@ -26,6 +27,7 @@ app.use(express.static('public'));
 app.use('/admin', express.static(path.join(__dirname, 'admin-portal')));
 
 // Middleware
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use(cors());
 app.use(morgan('dev'));
 app.use(express.json());
