@@ -15,7 +15,6 @@ function formatDuration(ms) {
   if (h === 0) return `${m}m`;
   return m > 0 ? `${h}h ${m}m` : `${h}h`;
 }
-const { listProductImages: listStorageImages, deleteProductImage: deleteStorageImage } = require('../services/storageService');
 const { createZohoSalesOrder, confirmZohoSalesOrder, createZohoInvoiceFromSO, updateZohoSOOrderId } = require('../services/zohoOrderService');
 const { getAccessToken } = require('../services/zohoService');
 const { formatTimestamps } = require('../utils/formatDoc');
@@ -611,28 +610,6 @@ const confirmHandover = async (req, res) => {
   }
 };
 
-// GET /api/admin/products/images
-const listProductImages = async (req, res) => {
-  try {
-    const images = await listStorageImages();
-    res.json({ success: true, data: { images } });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
-  }
-};
-
-// DELETE /api/admin/products/images/:filename
-const deleteProductImage = async (req, res) => {
-  try {
-    const { filename } = req.params;
-    if (!filename) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'filename required' });
-    await deleteStorageImage(filename);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
-  }
-};
-
 module.exports = {
   listOrders,
   getNewOrderCount,
@@ -655,7 +632,5 @@ module.exports = {
   setDriverPin,
   listHandovers,
   confirmHandover,
-  listCodHistory,
-  listProductImages,
-  deleteProductImage
+  listCodHistory
 };

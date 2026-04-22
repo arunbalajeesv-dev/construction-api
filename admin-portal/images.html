@@ -9,12 +9,13 @@
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
-    --navy:#1e2235; --navy-light:#2a3050; --red:#e53935; --blue:#1565c0;
+    --navy:#1e2235; --navy-light:#2a3050; --red:#e53935; --blue:#1565c0; --blue2:#3b82f6;
     --bg:#f0f2f7; --card:#ffffff; --text:#1a1f36; --muted:#6b7280; --border:#e5e7eb;
-    --green:#10b981; --red2:#ef4444; --amber:#f59e0b;
+    --green:#10b981; --red2:#ef4444; --amber:#f59e0b; --purple:#8b5cf6;
   }
   body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); display:flex; min-height:100vh; }
 
+  /* SIDEBAR */
   .sidebar { width:220px; min-height:100vh; background:var(--navy); display:flex; flex-direction:column; position:fixed; left:0; top:0; z-index:40; }
   .sidebar-brand { padding:20px 16px 16px; border-bottom:1px solid rgba(255,255,255,0.08); }
   .sidebar-brand .name { color:#fff; font-size:18px; font-weight:700; }
@@ -27,66 +28,107 @@
   .online-indicator { display:flex; align-items:center; gap:6px; color:rgba(255,255,255,0.5); font-size:12px; }
   .online-dot { width:8px; height:8px; background:var(--green); border-radius:50%; flex-shrink:0; }
 
+  /* MAIN */
   .main { margin-left:220px; flex:1; display:flex; flex-direction:column; min-height:100vh; }
   .topbar { height:60px; background:#fff; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between; padding:0 24px; position:sticky; top:0; z-index:30; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
   .topbar-title { font-size:18px; font-weight:700; }
-  .topbar-right { display:flex; align-items:center; gap:12px; }
   .btn-logout { background:none; border:none; color:var(--muted); font-size:13px; font-family:'DM Sans',sans-serif; cursor:pointer; padding:6px 10px; border-radius:6px; transition:background 0.15s; }
   .btn-logout:hover { background:var(--bg); }
 
   .content { padding:24px; flex:1; }
 
-  /* TOOLBAR */
-  .toolbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
-  .img-count { font-size:13px; color:var(--muted); }
-  .btn-upload {
-    background:var(--blue); color:#fff; border:none; padding:10px 20px;
-    border-radius:8px; font-family:'DM Sans',sans-serif; font-size:14px; font-weight:600;
-    cursor:pointer; display:flex; align-items:center; gap:8px; transition:background 0.15s;
+  /* STATS BAR */
+  .stats-bar { display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; align-items:center; }
+  .stat-chip { padding:6px 14px; border-radius:20px; font-size:13px; font-weight:600; }
+  .chip-total { background:var(--navy); color:#fff; }
+  .chip-has { background:#d1fae5; color:#065f46; }
+  .chip-missing { background:#fee2e2; color:#991b1b; }
+
+  /* CONTROLS */
+  .controls-row { display:flex; gap:10px; margin-bottom:20px; flex-wrap:wrap; }
+  .search-input {
+    flex:1; min-width:220px; padding:9px 14px; border:1.5px solid var(--border); border-radius:8px;
+    font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text); outline:none; transition:border-color 0.2s;
   }
-  .btn-upload:hover { background:#0d47a1; }
-  .btn-upload:disabled { background:#aaa; cursor:not-allowed; }
+  .search-input:focus { border-color:var(--blue); }
+  .category-select {
+    padding:9px 14px; border:1.5px solid var(--border); border-radius:8px;
+    font-family:'DM Sans',sans-serif; font-size:14px; color:var(--text);
+    outline:none; background:#fff; cursor:pointer; min-width:160px;
+  }
+  .category-select:focus { border-color:var(--blue); }
 
-  /* GRID */
-  .img-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px,1fr)); gap:16px; }
+  /* PRODUCT GRID */
+  .product-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(220px,1fr)); gap:16px; }
 
-  .img-card {
+  .product-card {
     background:#fff; border-radius:12px; overflow:hidden;
-    box-shadow:0 1px 4px rgba(0,0,0,0.08); display:flex; flex-direction:column;
+    box-shadow:0 1px 4px rgba(0,0,0,0.07); display:flex; flex-direction:column;
     transition:box-shadow 0.15s;
+    position:relative;
   }
-  .img-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.12); }
-  .img-thumb { width:100%; height:150px; object-fit:cover; display:block; background:#f0f2f7; }
-  .img-card-body { padding:12px; flex:1; display:flex; flex-direction:column; gap:8px; }
-  .img-filename { font-size:11px; color:var(--muted); word-break:break-all; line-height:1.5; font-family:'JetBrains Mono',monospace; }
-  .img-date { font-size:11px; color:var(--muted); }
-  .img-actions { display:flex; gap:8px; margin-top:auto; padding-top:4px; }
-  .btn-copy {
-    flex:1; background:#e3f2fd; color:var(--blue); border:none;
-    padding:7px 0; border-radius:7px; font-size:12px; font-weight:600;
-    cursor:pointer; font-family:'DM Sans',sans-serif; transition:background 0.15s;
-  }
-  .btn-copy:hover { background:#bbdefb; }
-  .btn-copy.copied { background:#d1fae5; color:#065f46; }
-  .btn-del {
-    background:#fee2e2; color:var(--red2); border:none;
-    padding:7px 10px; border-radius:7px; font-size:13px;
-    cursor:pointer; transition:background 0.15s;
-  }
-  .btn-del:hover { background:#fecaca; }
-  .btn-del:disabled { opacity:0.5; cursor:not-allowed; }
+  .product-card:hover { box-shadow:0 4px 14px rgba(0,0,0,0.1); }
 
-  /* STATES */
+  /* THUMBNAIL */
+  .thumb-wrap {
+    width:100%; height:130px; overflow:hidden; position:relative;
+    background:#f0f2f7; flex-shrink:0;
+  }
+  .thumb-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+  .thumb-placeholder {
+    width:100%; height:100%; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:6px;
+    color:#b0b8c8; font-size:12px; font-weight:500;
+  }
+  .thumb-placeholder svg { opacity:0.45; }
+
+  /* DELETE OVERLAY on thumbnail */
+  .thumb-del {
+    position:absolute; top:6px; right:6px;
+    background:rgba(239,68,68,0.88); color:#fff; border:none;
+    width:28px; height:28px; border-radius:6px; cursor:pointer;
+    font-size:14px; display:none; align-items:center; justify-content:center;
+    transition:background 0.15s;
+  }
+  .product-card:hover .thumb-del { display:flex; }
+  .thumb-del:hover { background:#dc2626; }
+
+  /* UPLOADING OVERLAY */
+  .upload-overlay {
+    display:none; position:absolute; inset:0; background:rgba(30,34,53,0.65);
+    align-items:center; justify-content:center; flex-direction:column; gap:8px;
+    color:#fff; font-size:13px; font-weight:600; border-radius:12px;
+  }
+  .upload-overlay.show { display:flex; }
+
+  /* CARD BODY */
+  .card-body { padding:12px; flex:1; display:flex; flex-direction:column; gap:6px; }
+  .product-name { font-size:13px; font-weight:600; color:var(--text); line-height:1.4; }
+  .product-cat { font-size:11px; color:var(--muted); }
+  .badge-variants {
+    display:inline-flex; align-items:center; padding:2px 8px; border-radius:10px;
+    font-size:10px; font-weight:700; background:#ede9fe; color:#5b21b6; width:fit-content;
+  }
+  .btn-upload-img {
+    margin-top:auto; width:100%; padding:8px; border:1.5px dashed var(--border);
+    border-radius:7px; background:#fafbfc; color:var(--muted);
+    font-family:'DM Sans',sans-serif; font-size:12px; font-weight:600;
+    cursor:pointer; transition:all 0.15s; display:flex; align-items:center; justify-content:center; gap:5px;
+  }
+  .btn-upload-img:hover { border-color:var(--blue); color:var(--blue); background:#f0f7ff; }
+  .btn-upload-img:disabled { opacity:0.5; cursor:not-allowed; }
+
+  /* EMPTY + LOADING */
   .state-box { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 20px; color:var(--muted); gap:12px; }
-  .state-icon { font-size:52px; }
+  .state-icon { font-size:48px; }
   .state-text { font-size:15px; font-weight:500; }
-  .state-sub { font-size:13px; }
 
-  .spinner { display:inline-block; width:18px; height:18px; border:2.5px solid #e0e0e0; border-top-color:var(--blue); border-radius:50%; animation:spin 0.6s linear infinite; }
+  .spinner { display:inline-block; width:22px; height:22px; border:3px solid rgba(255,255,255,0.3); border-top-color:#fff; border-radius:50%; animation:spin 0.6s linear infinite; }
+  .spinner-blue { border:2.5px solid #e0e7ff; border-top-color:var(--blue); }
   @keyframes spin { to { transform:rotate(360deg); } }
 
   /* TOAST */
-  #toast { position:fixed; bottom:24px; right:24px; z-index:999; background:var(--navy); color:#fff; padding:14px 20px; border-radius:10px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,0.25); transform:translateY(80px); opacity:0; transition:all 0.3s; pointer-events:none; }
+  #toast { position:fixed; bottom:24px; right:24px; z-index:999; background:var(--navy); color:#fff; padding:14px 20px; border-radius:10px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,0.25); transform:translateY(80px); opacity:0; transition:all 0.3s; pointer-events:none; max-width:340px; }
   #toast.show { transform:translateY(0); opacity:1; }
   #toast.success { background:var(--green); }
   #toast.error { background:var(--red2); }
@@ -114,27 +156,32 @@
 <div class="main">
   <div class="topbar">
     <div class="topbar-title">Product Images</div>
-    <div class="topbar-right">
-      <button class="btn-logout" onclick="logout()">Logout</button>
-    </div>
+    <button class="btn-logout" onclick="logout()">Logout</button>
   </div>
 
   <div class="content">
-    <div class="toolbar">
-      <div class="img-count" id="imgCount"></div>
-      <div style="display:flex;gap:10px;align-items:center">
-        <input type="file" id="uploadInput" accept="image/*" style="display:none" onchange="handleUpload(this)">
-        <button class="btn-upload" id="uploadBtn" onclick="document.getElementById('uploadInput').click()">
-          + Upload Image
-        </button>
-      </div>
+    <!-- STATS -->
+    <div class="stats-bar" id="statsBar" style="display:none">
+      <span class="stat-chip chip-total" id="statTotal"></span>
+      <span class="stat-chip chip-has" id="statHas"></span>
+      <span class="stat-chip chip-missing" id="statMissing"></span>
     </div>
 
-    <div id="stateBox" class="state-box">
-      <span class="spinner"></span>
-      <span class="state-text">Loading images...</span>
+    <!-- CONTROLS -->
+    <div class="controls-row">
+      <input type="text" class="search-input" id="searchInput"
+        placeholder="Search products..." oninput="renderGrid()">
+      <select class="category-select" id="catFilter" onchange="renderGrid()">
+        <option value="">All Categories</option>
+      </select>
     </div>
-    <div class="img-grid" id="imgGrid" style="display:none"></div>
+
+    <!-- GRID / STATES -->
+    <div id="stateBox" class="state-box">
+      <span class="spinner spinner-blue" style="width:28px;height:28px;border-width:3px"></span>
+      <span class="state-text">Loading products...</span>
+    </div>
+    <div class="product-grid" id="productGrid" style="display:none"></div>
   </div>
 </div>
 
@@ -145,136 +192,204 @@ const API_BASE = 'https://construction-api-2.onrender.com';
 const token = sessionStorage.getItem('adminToken');
 if (!token) window.location.href = 'login.html';
 
-function authHeaders() { return { 'Authorization': `Bearer ${token}` }; }
-async function apiFetch(url, opts = {}) {
-  const res = await fetch(API_BASE + url, { ...opts, headers: { ...authHeaders(), ...(opts.headers || {}) } });
-  if (res.status === 401) { window.location.href = 'login.html'; throw new Error('Unauthorized'); }
-  return res;
-}
+function authHeaders() { return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }; }
 function logout() { sessionStorage.clear(); window.location.href = 'login.html'; }
 
-let images = [];
+const PLACEHOLDER = 'https://placehold.co/400x300?text=No+Image';
+function hasImage(url) { return url && !url.includes('placehold.co') && url.trim() !== ''; }
+
+let allProducts = [];
 
 // ── LOAD ──────────────────────────────────────────────────
-async function loadImages() {
+async function loadProducts() {
   try {
-    const res = await apiFetch('/api/admin/products/images');
+    const res = await fetch(`${API_BASE}/api/products`);
     const data = await res.json();
     if (!data.success) throw new Error(data.message);
-    images = data.data?.images || [];
+    allProducts = data.data || [];
+    populateCategoryFilter();
+    updateStats();
     renderGrid();
   } catch (err) {
-    showState('⚠️', 'Failed to load images', err.message);
+    document.getElementById('stateBox').innerHTML =
+      `<span class="state-icon">⚠️</span><span class="state-text">Failed to load: ${err.message}</span>`;
   }
+}
+
+function populateCategoryFilter() {
+  const cats = [...new Set(allProducts.map(p => p.category).filter(Boolean))].sort();
+  const sel = document.getElementById('catFilter');
+  cats.forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    sel.appendChild(opt);
+  });
+}
+
+function updateStats() {
+  const withImg = allProducts.filter(p => hasImage(p.imageUrl || p.image)).length;
+  document.getElementById('statTotal').textContent = `${allProducts.length} products`;
+  document.getElementById('statHas').textContent = `${withImg} have images`;
+  document.getElementById('statMissing').textContent = `${allProducts.length - withImg} missing`;
+  document.getElementById('statsBar').style.display = 'flex';
+}
+
+// ── FILTER + RENDER ────────────────────────────────────────
+function getFiltered() {
+  const q = document.getElementById('searchInput').value.trim().toLowerCase();
+  const cat = document.getElementById('catFilter').value;
+  return allProducts.filter(p => {
+    const nameMatch = !q || (p.name || '').toLowerCase().includes(q);
+    const catMatch = !cat || p.category === cat;
+    return nameMatch && catMatch;
+  });
 }
 
 function renderGrid() {
-  const grid = document.getElementById('imgGrid');
+  const list = getFiltered();
+  const grid = document.getElementById('productGrid');
   const state = document.getElementById('stateBox');
-  const countEl = document.getElementById('imgCount');
-  countEl.textContent = `${images.length} image${images.length !== 1 ? 's' : ''} in Firebase Storage`;
 
-  if (!images.length) {
-    grid.style.display = 'none';
-    showState('🖼️', 'No images yet', 'Upload your first product image using the button above.');
-    return;
-  }
+  if (!allProducts.length) return; // still loading
 
   state.style.display = 'none';
   grid.style.display = 'grid';
-  grid.innerHTML = images.map(img => buildCard(img)).join('');
+
+  if (!list.length) {
+    grid.style.display = 'none';
+    state.style.display = 'flex';
+    state.innerHTML = `<span class="state-icon">🔍</span><span class="state-text">No products match your filters</span>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(p => buildCard(p)).join('');
 }
 
-function buildCard(img) {
-  const date = img.uploadedAt ? new Date(img.uploadedAt).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }) : '';
-  const safeId = img.name.replace(/[^a-zA-Z0-9]/g, '_');
+function buildCard(p) {
+  const imgUrl = p.imageUrl || p.image || '';
+  const hasImg = hasImage(imgUrl);
+  const thumbHtml = hasImg
+    ? `<img src="${imgUrl}" alt="${p.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+    : '';
+  const placeholderHtml = `
+    <div class="thumb-placeholder" style="${hasImg ? 'display:none' : ''}">
+      <svg width="36" height="36" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+          d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/>
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
+      </svg>
+      No image
+    </div>`;
+
   return `
-    <div class="img-card" id="card-${safeId}">
-      <img class="img-thumb" src="${img.url}" alt="${img.name}" loading="lazy"
-        onerror="this.style.background='var(--bg)';this.removeAttribute('src')">
-      <div class="img-card-body">
-        <div class="img-filename">${img.name}</div>
-        ${date ? `<div class="img-date">${date}</div>` : ''}
-        <div class="img-actions">
-          <button class="btn-copy" id="copy-${safeId}" onclick="copyUrl('${img.url}','${safeId}')">Copy URL</button>
-          <button class="btn-del" id="del-${safeId}" onclick="deleteImage('${img.name}','${safeId}')" title="Delete">🗑</button>
-        </div>
+    <div class="product-card" id="card-${p.id}">
+      <div class="thumb-wrap">
+        ${thumbHtml}${placeholderHtml}
+        ${hasImg ? `<button class="thumb-del" title="Remove image" onclick="removeImage(event,'${p.id}','${(p.name||'').replace(/'/g,"\\'")}')">🗑</button>` : ''}
+      </div>
+      <div class="upload-overlay" id="overlay-${p.id}">
+        <div class="spinner"></div>
+        <span>Uploading...</span>
+      </div>
+      <div class="card-body">
+        <div class="product-name">${p.name}</div>
+        <div class="product-cat">${p.category || '—'}</div>
+        ${p.hasVariants ? '<span class="badge-variants">Variants</span>' : ''}
+        <input type="file" id="file-${p.id}" accept="image/*" style="display:none"
+          onchange="handleUpload('${p.id}','${(p.name||'').replace(/'/g,"\\'")}',this)">
+        <button class="btn-upload-img" id="upbtn-${p.id}"
+          onclick="document.getElementById('file-${p.id}').click()">
+          ＋ Upload Image
+        </button>
       </div>
     </div>`;
 }
 
-function showState(icon, text, sub = '') {
-  const box = document.getElementById('stateBox');
-  box.style.display = 'flex';
-  box.innerHTML = `<span class="state-icon">${icon}</span><span class="state-text">${text}</span>${sub ? `<span class="state-sub">${sub}</span>` : ''}`;
-}
-
 // ── UPLOAD ────────────────────────────────────────────────
-async function handleUpload(input) {
+async function handleUpload(productId, productName, input) {
   const file = input.files[0];
   if (!file) return;
-  const btn = document.getElementById('uploadBtn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Uploading...';
+
+  setCardLoading(productId, true);
 
   try {
+    // Step 1: upload file to Firebase Storage
     const formData = new FormData();
     formData.append('image', file);
-    const res = await fetch(`${API_BASE}/api/upload`, {
-      method: 'POST',
-      headers: authHeaders(),
-      body: formData
-    });
-    const data = await res.json();
-    if (!data.success) throw new Error(data.message || 'Upload failed');
+    const uploadRes = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
+    const uploadData = await uploadRes.json();
+    if (!uploadData.success) throw new Error('Upload failed: ' + (uploadData.message || ''));
 
-    // Extract filename from URL
-    const urlParts = data.image_url.split('/');
-    const newImage = { name: urlParts[urlParts.length - 1], url: data.image_url, uploadedAt: new Date().toISOString() };
-    images.unshift(newImage);
-    renderGrid();
-    showToast('Image uploaded!', 'success');
+    // Step 2: write URL to Zoho "Image URL" field + Firestore imageMap
+    const updateRes = await fetch(`${API_BASE}/api/products/${productId}/image`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url: uploadData.image_url })
+    });
+    const updateData = await updateRes.json();
+    if (!updateData.success) throw new Error('Zoho update failed: ' + (updateData.message || ''));
+
+    // Step 3: update local data + re-render card
+    const idx = allProducts.findIndex(p => p.id === productId);
+    if (idx !== -1) {
+      allProducts[idx] = { ...allProducts[idx], imageUrl: uploadData.image_url, image: uploadData.image_url };
+    }
+    updateStats();
+    refreshCard(productId);
+    showToast(`Image updated for ${productName}`, 'success');
   } catch (err) {
-    showToast('Upload failed: ' + err.message, 'error');
+    showToast('Failed: ' + err.message, 'error');
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = '+ Upload Image';
+    setCardLoading(productId, false);
     input.value = '';
   }
 }
 
-// ── COPY URL ──────────────────────────────────────────────
-function copyUrl(url, safeId) {
-  navigator.clipboard.writeText(url).then(() => {
-    const btn = document.getElementById('copy-' + safeId);
-    if (!btn) return;
-    btn.textContent = '✓ Copied!';
-    btn.classList.add('copied');
-    setTimeout(() => { btn.textContent = 'Copy URL'; btn.classList.remove('copied'); }, 2000);
-  });
-}
+// ── REMOVE IMAGE ──────────────────────────────────────────
+async function removeImage(evt, productId, productName) {
+  evt.stopPropagation();
+  if (!confirm(`Remove image for "${productName}"?`)) return;
 
-// ── DELETE ────────────────────────────────────────────────
-async function deleteImage(filename, safeId) {
-  if (!confirm(`Delete "${filename}" from Firebase Storage?\nThis cannot be undone.`)) return;
-  const btn = document.getElementById('del-' + safeId);
-  if (btn) btn.disabled = true;
-
+  setCardLoading(productId, true);
   try {
-    const res = await apiFetch(`/api/admin/products/images/${encodeURIComponent(filename)}`, { method: 'DELETE' });
+    const res = await fetch(`${API_BASE}/api/products/${productId}/image`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image_url: '' })
+    });
     const data = await res.json();
-    if (!data.success) throw new Error(data.message || 'Delete failed');
+    if (!data.success) throw new Error(data.message || 'Failed');
 
-    images = images.filter(img => img.name !== filename);
-    renderGrid();
-    showToast('Image deleted.', 'success');
+    const idx = allProducts.findIndex(p => p.id === productId);
+    if (idx !== -1) {
+      allProducts[idx] = { ...allProducts[idx], imageUrl: '', image: '' };
+    }
+    updateStats();
+    refreshCard(productId);
+    showToast(`Image removed for ${productName}`, 'success');
   } catch (err) {
-    showToast('Delete failed: ' + err.message, 'error');
-    if (btn) btn.disabled = false;
+    showToast('Failed: ' + err.message, 'error');
+  } finally {
+    setCardLoading(productId, false);
   }
 }
 
 // ── HELPERS ───────────────────────────────────────────────
+function setCardLoading(productId, loading) {
+  const overlay = document.getElementById(`overlay-${productId}`);
+  const btn = document.getElementById(`upbtn-${productId}`);
+  if (overlay) overlay.classList.toggle('show', loading);
+  if (btn) btn.disabled = loading;
+}
+
+function refreshCard(productId) {
+  const product = allProducts.find(p => p.id === productId);
+  if (!product) return;
+  const card = document.getElementById(`card-${productId}`);
+  if (!card) return;
+  card.outerHTML = buildCard(product);
+}
+
 function showToast(msg, type = '') {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -284,7 +399,7 @@ function showToast(msg, type = '') {
 }
 
 // ── INIT ──────────────────────────────────────────────────
-loadImages();
+loadProducts();
 </script>
 </body>
 </html>
