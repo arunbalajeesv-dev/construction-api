@@ -68,6 +68,9 @@ router.post('/orders/:orderId/fix-invoice', fixInvoice);
 
 // Product management
 router.put('/products/:id/featured', toggleFeatured);
+// Customer lookup by phone
+router.get('/customers/phone/:phone', getCustomerByPhoneNumber);
+router.get('/customers/:userId/orders', getCustomerOrders);
 
 // Vehicles
 router.get('/vehicles', listVehicles);

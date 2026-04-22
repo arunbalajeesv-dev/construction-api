@@ -1,5 +1,6 @@
 const { getDeliveryConfig } = require('./firestoreService');
 const { getRoadDistance } = require('./googleMapsService');
+const logger = require('../utils/logger');
 
 const WAREHOUSE = {
   latitude: parseFloat(process.env.WAREHOUSE_LAT) || 12.863326,
@@ -53,7 +54,7 @@ async function calculateDelivery(pincode, latitude, longitude, orderValue = 0, a
       distanceText = result.distanceText;
       distanceSource = 'google_maps';
     } catch (err) {
-      console.warn('Google Maps distance failed, falling back to Haversine:', err.message);
+      logger.warn({ err: err.message }, 'Google Maps distance failed; falling back to Haversine');
       distanceKm = haversine(WAREHOUSE.latitude, WAREHOUSE.longitude, latitude, longitude);
     }
   } else {

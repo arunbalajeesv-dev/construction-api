@@ -184,9 +184,9 @@ const createOrder = async (req, res) => {
     // 9. Clear cart
     await saveCart(userId, { items: [] });
 
-    res.json({ success: true, data: { order: enrichOrderForCustomer(order) } });
+    res.json({ success: true, data: { order: toOrderDTO(order) } });
   } catch (err) {
-    console.error('createOrder error:', err.response?.data || err.message);
+    req.log.error({ err: err.response?.data || err.message }, 'createOrder failed');
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.response?.data?.message || err.message });
   }
 };
@@ -196,7 +196,7 @@ const getUserOrders = async (req, res) => {
     const { userId } = req.params;
     if (!userId) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'userId is required' });
     const orders = await getOrdersByUser(userId);
-    res.json({ success: true, data: { orders: orders.map(enrichOrderForCustomer) } });
+    res.json({ success: true, data: { orders: orders.map(toOrderDTO) } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
@@ -207,7 +207,7 @@ const getOrderDetail = async (req, res) => {
     const { orderId } = req.params;
     const order = await getOrderById(orderId);
     if (!order) return res.status(404).json({ success: false, error: 'ORDER_NOT_FOUND', message: 'Order not found' });
-    res.json({ success: true, data: { order: enrichOrderForCustomer(order) } });
+    res.json({ success: true, data: { order: toOrderDTO(order) } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }

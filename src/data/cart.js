@@ -1,4 +1,5 @@
 const { getCart: getCartFromFirestore, saveCart: saveCartToFirestore } = require('../services/firestoreService');
+const logger = require('../utils/logger');
 
 const cartCache = {};
 
@@ -14,7 +15,7 @@ async function getCart(userId) {
 async function saveCart(userId, cart) {
   cartCache[userId] = cart;
   saveCartToFirestore(userId, cart).catch(err =>
-    console.error('Firestore cart save error:', err)
+    logger.error({ err: err.message, userId }, 'Firestore cart save error')
   );
   return cart;
 }

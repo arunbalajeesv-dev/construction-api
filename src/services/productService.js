@@ -17,7 +17,7 @@ const extractGST = (item) => {
 
 // Build image URL from custom field or fallback to placeholder
 const buildImage = (name, imageUrl) =>
-  imageUrl || `https://placehold.co/400x300?text=${encodeURIComponent(name)}`;
+  imageUrl || 'https://placehold.co/400x300/png';
 
 // In-memory cache
 const cache = {
@@ -33,14 +33,14 @@ function isCacheValid() {
   return cache.lastFetched && (Date.now() - cache.lastFetched) < cache.TTL;
 }
 
-async function fetchZohoData() {
+async function fetchZohoData(traceContext = null) {
   if (isCacheValid()) {
     return { items: cache.products, groups: cache.groups, categoryMap: cache.categoryMap };
   }
   const [items, groups, zohoCategories] = await Promise.all([
-    getZohoProducts(),
-    getZohoItemGroups(),
-    getZohoCategories()
+    getZohoProducts(traceContext),
+    getZohoItemGroups(traceContext),
+    getZohoCategories(traceContext)
   ]);
 
   // Build category id → name map
@@ -75,8 +75,14 @@ function clearCache() {
   cache.lastFetched = null;
 }
 
-const getAllProducts = async (category) => {
-  const { items, groups, categoryMap } = await fetchZohoData();
+async function getAllProducts(category = null, traceContext = null) {
+  // Handle case where category is actually traceContext (backwards compatibility)
+  if (category && typeof category === 'object' && category.traceId) {
+    traceContext = category;
+    category = null;
+  }
+  
+  const { items, groups, categoryMap } = await fetchZohoData(traceContext);
 
   // Build item lookup map for GST and custom fields
   const itemMap = {};
@@ -162,8 +168,8 @@ const getAllProducts = async (category) => {
   return allProducts;
 };
 
-const getProductById = async (id) => {
-  const { items, groups, categoryMap } = await fetchZohoData();
+const getProductById = async (id, traceContext = null) => {
+  const { items, groups, categoryMap } = await fetchZohoData(traceContext);
 
   // Check if it's a group id first
   const group = groups.find(g => g.group_id === id);

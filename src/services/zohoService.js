@@ -1,4 +1,6 @@
 const axios = require('axios');
+const logger = require('../utils/logger');
+const { createSpan } = require('../utils/spanTracer');
 
 let accessToken = null;
 let tokenExpiry = null;
@@ -46,13 +48,20 @@ async function getZohoCategories() {
   return (response.data.categories || []).filter(c => c.category_id !== '-1');
 }
 
-async function getZohoProductById(itemId) {
-  const token = await getAccessToken();
-  const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items/${itemId}`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    params: { organization_id: process.env.ZOHO_ORG_ID }
-  });
-  return response.data.item;
+async function getZohoProductById(itemId, traceContext = null) {
+  const span = createSpan({ traceContext }, 'zoho.api.getProductById', { endpoint: '/inventory/v1/items/:id', itemId });
+  try {
+    const token = await getAccessToken();
+    const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items/${itemId}`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID }
+    });
+    span.end({ success: true, item_id: response.data.item?.item_id });
+    return response.data.item;
+  } catch (error) {
+    span.end({ success: false, error: error.message });
+    throw error;
+  }
 }
 
 async function getZohoItemGroups() {
@@ -72,16 +81,24 @@ async function getZohoItemGroups() {
   return allGroups;
 }
 
-async function getZohoItemGroupById(groupId) {
-  const token = await getAccessToken();
-  const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/itemgroups/${groupId}`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    params: { organization_id: process.env.ZOHO_ORG_ID }
-  });
-  return response.data.item_group;
+async function getZohoItemGroupById(groupId, traceContext = null) {
+  const span = createSpan({ traceContext }, 'zoho.api.getItemGroupById', { endpoint: '/inventory/v1/itemgroups/:id', groupId });
+  try {
+    const token = await getAccessToken();
+    const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/itemgroups/${groupId}`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID }
+    });
+    span.end({ success: true, group_id: response.data.item_group?.group_id });
+    return response.data.item_group;
+  } catch (error) {
+    span.end({ success: false, error: error.message });
+    throw error;
+  }
 }
 
-async function createZohoContact(contactData) {
+async function createZohoContact(contactData, traceContext = null) {
+  const span = createSpan({ traceContext }, 'zoho.api.createContact', { phone: contactData.phone, endpoint: '/books/v3/contacts' });
   const token = await getAccessToken();
   const contactBody = {
     contact_name: contactData.business_name || contactData.name || contactData.phone,
@@ -108,55 +125,70 @@ async function createZohoContact(contactData) {
       country: 'India'
     } : {}
   };
-  console.log('Zoho contact request body:', JSON.stringify(contactBody, null, 2));
+  logger.debug({ body: contactBody }, 'Creating Zoho contact');
   try {
     const response = await axios.post('https://www.zohoapis.in/books/v3/contacts', contactBody, {
       headers: { Authorization: `Zoho-oauthtoken ${token}` },
       params: { organization_id: process.env.ZOHO_ORG_ID }
     });
-    console.log('Zoho contact response:', JSON.stringify(response.data, null, 2));
+    logger.debug({ contactId: response.data.contact?.contact_id }, 'Zoho contact created');
+    span.end({ success: true, contact_id: response.data.contact?.contact_id });
     return response.data.contact;
   } catch (error) {
     const errorData = error.response?.data;
     if (errorData?.code === 3062) {
-      console.log('Contact already exists in Zoho, searching by phone...');
-      const existing = await searchZohoContactByPhone(contactData.phone);
+      logger.info({ phone: contactData.phone }, 'Contact already exists in Zoho; searching by phone');
+      const existing = await searchZohoContactByPhone(contactData.phone, traceContext);
       if (existing) {
-        console.log('Found existing Zoho contact:', existing.contact_id);
+        logger.debug({ contactId: existing.contact_id }, 'Found existing Zoho contact');
+        span.end({ success: true, contact_id: existing.contact_id, existing: true });
         return existing;
       }
     }
-    console.error('createZohoContact error:', JSON.stringify(errorData, null, 2));
+    logger.error({ err: JSON.stringify(errorData || error.message) }, 'createZohoContact failed');
+    span.end({ success: false, error: errorData?.message || error.message });
     throw new Error(JSON.stringify(errorData || error.message));
   }
 }
 
-async function searchZohoContactByPhone(phone) {
-  const token = await getAccessToken();
-  const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/books/v3/contacts`, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    params: {
-      organization_id: process.env.ZOHO_ORG_ID,
-      search_text: phone,
-      contact_type: 'customer'
-    }
-  });
-  const contacts = response.data.contacts;
-  if (contacts && contacts.length > 0) {
-    return contacts[0];
+async function searchZohoContactByPhone(phone, traceContext = null) {
+  const span = createSpan({ traceContext }, 'zoho.api.searchContactByPhone', { phone, endpoint: '/books/v3/contacts' });
+  try {
+    const token = await getAccessToken();
+    const response = await axios.get(`${process.env.ZOHO_API_DOMAIN}/books/v3/contacts`, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: {
+        organization_id: process.env.ZOHO_ORG_ID,
+        search_text: phone,
+        contact_type: 'customer'
+      }
+    });
+    const contacts = response.data.contacts;
+    const found = contacts && contacts.length > 0;
+    span.end({ success: true, found, contactCount: contacts?.length || 0 });
+    return found ? contacts[0] : null;
+  } catch (error) {
+    span.end({ success: false, error: error.message });
+    throw error;
   }
-  return null;
 }
 
-async function updateZohoItemImage(itemId, imageUrl) {
-  const token = await getAccessToken();
-  const response = await axios.put(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items/${itemId}`, {
-    custom_fields: [{ label: 'Image URL', value: imageUrl }]
-  }, {
-    headers: { Authorization: `Zoho-oauthtoken ${token}` },
-    params: { organization_id: process.env.ZOHO_ORG_ID }
-  });
-  return response.data.item;
+async function updateZohoItemImage(itemId, imageUrl, traceContext = null) {
+  const span = createSpan({ traceContext }, 'zoho.api.updateItemImage', { itemId, endpoint: '/inventory/v1/items/:id' });
+  try {
+    const token = await getAccessToken();
+    const response = await axios.put(`${process.env.ZOHO_API_DOMAIN}/inventory/v1/items/${itemId}`, {
+      custom_fields: [{ label: 'Image URL', value: imageUrl }]
+    }, {
+      headers: { Authorization: `Zoho-oauthtoken ${token}` },
+      params: { organization_id: process.env.ZOHO_ORG_ID }
+    });
+    span.end({ success: true, item_id: response.data.item?.item_id });
+    return response.data.item;
+  } catch (error) {
+    span.end({ success: false, error: error.message });
+    throw error;
+  }
 }
 
 async function updateZohoItemFeatured(itemId, featured) {
@@ -204,17 +236,23 @@ async function updateZohoContact(zohoContactId, contactData) {
     };
   }
 
-  console.log('updateZohoContact body sent to Zoho:', JSON.stringify(updateBody, null, 2));
-  const response = await axios.put(
-    `https://www.zohoapis.in/books/v3/contacts/${zohoContactId}`,
-    updateBody,
-    {
-      headers: { Authorization: `Zoho-oauthtoken ${token}` },
-      params: { organization_id: process.env.ZOHO_ORG_ID }
-    }
-  );
-  console.log('updateZohoContact Zoho response:', JSON.stringify(response.data, null, 2));
-  return response.data.contact;
+  logger.debug({ body: updateBody }, 'Sending updateZohoContact request');
+  try {
+    const response = await axios.put(
+      `https://www.zohoapis.in/books/v3/contacts/${zohoContactId}`,
+      updateBody,
+      {
+        headers: { Authorization: `Zoho-oauthtoken ${token}` },
+        params: { organization_id: process.env.ZOHO_ORG_ID }
+      }
+    );
+    logger.debug({ contactId: response.data.contact?.contact_id }, 'updateZohoContact succeeded');
+    span.end({ success: true, contact_id: response.data.contact?.contact_id });
+    return response.data.contact;
+  } catch (error) {
+    span.end({ success: false, error: error.message });
+    throw error;
+  }
 }
 
 module.exports = {

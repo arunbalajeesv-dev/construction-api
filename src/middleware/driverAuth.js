@@ -22,6 +22,7 @@ async function driverAuth(req, res, next) {
     isActive: driver.isActive,
     isAvailable: driver.isAvailable
   };
+  req.log = req.log.child({ driverId: req.driver.driverId });
   next();
 }
 

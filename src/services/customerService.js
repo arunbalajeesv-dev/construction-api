@@ -1,5 +1,6 @@
 const { getCustomer, saveCustomer, getCustomerByPhone } = require('./firestoreService');
 const { createZohoContact, updateZohoContact } = require('./zohoService');
+const logger = require('../utils/logger');
 
 async function syncCustomer(userId, phone, name, is_business, business_name, gstin, registered_address) {
   console.log('syncCustomer called with:', { userId, phone, name, is_business, business_name, gstin });
@@ -37,14 +38,14 @@ async function syncCustomer(userId, phone, name, is_business, business_name, gst
           business_name,
           gstin,
           registered_address
-        });
+        }, traceContext);
       }
     }
 
     return existing;
   }
 
-  const zohoContact = await createZohoContact({ phone, name, is_business, business_name, gstin, registered_address });
+  const zohoContact = await createZohoContact({ phone, name, is_business, business_name, gstin, registered_address }, traceContext);
 
   return await saveCustomer({
     userId,

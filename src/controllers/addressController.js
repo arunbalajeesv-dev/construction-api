@@ -1,5 +1,6 @@
 const axios = require('axios');
 const { getAddresses, addAddress, updateAddress, deleteAddress, setDefaultAddress } = require('../services/firestoreService');
+const { toAddressDTO } = require('../models/addressDTO');
 
 async function geocodeFromPincode(pincode) {
   if (!process.env.GOOGLE_MAPS_API_KEY) return { latitude: null, longitude: null };
@@ -53,7 +54,7 @@ const getAddressesHandler = async (req, res) => {
   try {
     const { userId } = req.params;
     const addresses = await getAddresses(userId);
-    res.json({ success: true, data: { addresses } });
+    res.json({ success: true, data: { addresses: addresses.map(toAddressDTO) } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }
@@ -69,7 +70,7 @@ const updateAddressHandler = async (req, res) => {
 
     const updated = await updateAddress(userId, addressId, addressData);
     if (!updated) return res.status(404).json({ success: false, error: 'ADDRESS_NOT_FOUND', message: 'Address not found' });
-    res.json({ success: true, message: 'Address updated successfully', data: { address: updated } });
+    res.json({ success: true, message: 'Address updated successfully', data: { address: toAddressDTO(updated) } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
   }

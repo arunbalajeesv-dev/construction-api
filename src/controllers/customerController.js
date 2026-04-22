@@ -1,11 +1,13 @@
 const { getCustomer, saveCustomer, getCustomerByPhone } = require('../services/firestoreService');
+const { toCustomerDTO } = require('../models/customerDTO');
 
 async function getCustomerHandler(req, res) {
   const customer = await getCustomer(req.params.userId);
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
-  res.json({ success: true, data: { customer }, customer, user: customer });
+  const dto = toCustomerDTO(customer);
+  res.json({ success: true, data: { customer: dto }, customer: dto, user: dto });
 }
 
 async function updateDeliveryAddress(req, res) {
@@ -47,7 +49,7 @@ async function getCustomerByPhoneHandler(req, res) {
   if (!customer) {
     return res.status(404).json({ success: false, message: 'Customer not found' });
   }
-  res.json({ success: true, user: customer });
+  res.json({ success: true, user: toCustomerDTO(customer) });
 }
 
 module.exports = { getCustomer: getCustomerHandler, updateDeliveryAddress, updateRegisteredAddress, listCustomers, getCustomerByPhone: getCustomerByPhoneHandler };

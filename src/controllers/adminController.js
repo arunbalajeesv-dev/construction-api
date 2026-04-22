@@ -2,7 +2,7 @@ const axios = require('axios');
 const bcrypt = require('bcrypt');
 const {
   getAllOrders, getOrderById, updateOrder,
-  getCustomer, getAddressById,
+  getCustomer, getCustomerByPhone, getAddressById, getOrdersByUser,
   getVehicles, addVehicle, deleteVehicle, getVehicleById,
   getDrivers, addDriver, softDeleteDriver, getDriverById, updateDriver, updateVehicle,
   getAllHandovers, getHandoverById, updateHandover
@@ -133,7 +133,8 @@ const acceptOrder = async (req, res) => {
       order.items,
       address,
       order.delivery_charge || 0,
-      customer.phone || null
+      customer.phone || null,
+      req.traceContext
     );
 
     // Write internal orderId to Zoho SO custom field (non-blocking)
@@ -142,27 +143,27 @@ const acceptOrder = async (req, res) => {
     });
 
     try {
-      const confirmResult = await confirmZohoSalesOrder(zohoSO.salesorder_id);
+      const confirmResult = await confirmZohoSalesOrder(zohoSO.salesorder_id, req.traceContext);
       if (confirmResult.code !== 0) {
-        console.error('SO confirm returned non-zero code:', confirmResult);
+        req.log.warn({ confirmResult }, 'SO confirm returned non-zero code');
       }
     } catch (confirmErr) {
-      console.error('SO confirm failed (non-fatal):', confirmErr.response?.data || confirmErr.message);
+      req.log.warn({ err: confirmErr.response?.data || confirmErr.message }, 'SO confirm failed (non-fatal)');
     }
 
     let zohoInvoice = null;
     try {
-      zohoInvoice = await createZohoInvoiceFromSO(zohoSO.salesorder_id);
+      zohoInvoice = await createZohoInvoiceFromSO(zohoSO.salesorder_id, req.traceContext);
     } catch (invoiceErr) {
-      console.error('Invoice creation failed (non-fatal):', invoiceErr.response?.data || invoiceErr.message);
+      req.log.warn({ err: invoiceErr.response?.data || invoiceErr.message }, 'Invoice creation failed (non-fatal)');
     }
 
     if (zohoInvoice?.invoice_id) {
       try {
         await markZohoInvoiceAsSent(zohoInvoice.invoice_id);
-        console.log('Invoice marked as sent:', zohoInvoice.invoice_id);
+        req.log.info({ invoiceId: zohoInvoice.invoice_id }, 'Invoice marked as sent');
       } catch (sentErr) {
-        console.error('Mark invoice as sent failed (non-fatal):', sentErr.response?.data || sentErr.message);
+        req.log.warn({ err: sentErr.response?.data || sentErr.message }, 'Mark invoice as sent failed (non-fatal)');
       }
     }
 
@@ -180,7 +181,7 @@ const acceptOrder = async (req, res) => {
 
     res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
-    console.error('acceptOrder error:', err.response?.data || err.message);
+    req.log.error({ err: err.response?.data || err.message }, 'acceptOrder failed');
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.response?.data?.message || err.message });
   }
 };
@@ -368,10 +369,10 @@ const fixInvoice = async (req, res) => {
       return res.status(404).json({ success: false, error: 'INVOICE_NOT_FOUND', message: 'No invoice on this order' });
     }
     await markZohoInvoiceAsSent(order.zoho_invoice_id);
-    console.log('fix-invoice: marked as sent:', order.zoho_invoice_id);
+    req.log.info({ invoiceId: order.zoho_invoice_id }, 'fix-invoice: marked as sent');
     res.json({ success: true, message: `Invoice ${order.zoho_invoice_id} marked as sent` });
   } catch (err) {
-    console.error('fix-invoice error:', err.response?.data || err.message);
+    req.log.error({ err: err.response?.data || err.message }, 'fix-invoice failed');
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.response?.data?.message || err.message });
   }
 };

@@ -24,6 +24,7 @@ async function syncAuth(req, res) {
     const customer = await syncCustomer(userId, phone, name, is_business, business_name, gstin, registered_address);
     res.json({ success: true, data: { customer }, customer, user: customer });
   } catch (err) {
+    req.log.error({ err: err.message }, 'syncAuth failed');
     res.status(500).json({ success: false, message: err.message });
   }
 }

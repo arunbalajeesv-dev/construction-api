@@ -176,7 +176,7 @@ const completeDelivery = [
 
       if (order.zoho_so_id) {
         updateZohoShipment(order.zoho_so_id).catch(err => {
-          console.error('Zoho shipment update failed (non-fatal):', err.response?.data || err.message);
+          req.log.warn({ err: err.response?.data || err.message }, 'Zoho shipment update failed (non-fatal)');
         });
       }
 
