@@ -7,6 +7,7 @@ const uploadImage = [
   upload.single('image'),
   async (req, res) => {
     try {
+      if (!req.file) return res.status(400).json({ success: false, message: 'No file uploaded' });
       const image_url = await uploadToFirebase(req.file.buffer, req.file.mimetype, 'products');
       res.json({ success: true, image_url });
     } catch (err) {

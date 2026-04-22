@@ -316,7 +316,11 @@ async function handleUpload(productId, productName, input) {
     // Step 1: upload file to Firebase Storage
     const formData = new FormData();
     formData.append('image', file);
-    const uploadRes = await fetch(`${API_BASE}/api/upload`, { method: 'POST', body: formData });
+    const uploadRes = await fetch(`${API_BASE}/api/upload`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+      body: formData
+    });
     const uploadData = await uploadRes.json();
     if (!uploadData.success) throw new Error('Upload failed: ' + (uploadData.message || ''));
 
