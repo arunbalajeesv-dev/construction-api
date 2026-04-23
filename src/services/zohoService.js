@@ -202,8 +202,8 @@ async function updateZohoItemFeatured(itemId, featured) {
   return response.data.item;
 }
 
-async function updateZohoContact(zohoContactId, contactData) {
-  console.log('updateZohoContact called with:', { zohoContactId, contactData });
+async function updateZohoContact(zohoContactId, contactData, traceContext = null) {
+  const span = createSpan({ traceContext }, 'zoho.api.updateContact', { zohoContactId, endpoint: '/books/v3/contacts/:id' });
   const token = await getAccessToken();
   const updateBody = {};
 

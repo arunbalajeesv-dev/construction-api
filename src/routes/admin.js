@@ -1,4 +1,5 @@
 const express = require('express');
+const axios = require('axios');
 const router = express.Router();
 const {
   listOrders,
@@ -76,6 +77,16 @@ router.get('/customers/:userId/orders', getCustomerOrders);
 router.get('/vehicles', listVehicles);
 router.post('/vehicles', createVehicle);
 router.delete('/vehicles/:vehicleId', removeVehicle);
+
+// Temp: server outbound IP — for MSG91 whitelisting
+router.get('/debug/outbound-ip', async (req, res) => {
+  try {
+    const r = await axios.get('https://api.ipify.org?format=json', { timeout: 5000 });
+    res.json({ success: true, ip: r.data.ip });
+  } catch (err) {
+    res.status(502).json({ success: false, message: err.message });
+  }
+});
 
 // Drivers
 router.get('/drivers', listDrivers);

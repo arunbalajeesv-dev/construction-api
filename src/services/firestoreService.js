@@ -1,4 +1,5 @@
 const admin = require('firebase-admin');
+const logger = require('../utils/logger');
 
 let serviceAccount;
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
