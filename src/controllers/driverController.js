@@ -101,9 +101,11 @@ const updateDriverLocation = async (req, res) => {
       return res.json({ success: true });
     }
 
-    // Resolve delivery coordinates
+    // Resolve delivery coordinates for ETA computation
     let destLat = order.deliveryCoordinates?.latitude;
     let destLng = order.deliveryCoordinates?.longitude;
+    let etaString = null;
+    let etaMinutes = null;
 
     if (!destLat || !destLng) {
       const address = order.addressId
@@ -113,44 +115,37 @@ const updateDriverLocation = async (req, res) => {
       destLat = address?.latitude;
       destLng = address?.longitude;
 
-      // Geocode if address has no coordinates
       if (!destLat || !destLng) {
-        if (!process.env.GOOGLE_MAPS_API_KEY) {
-          await updateOrder(orderId, firestoreUpdate, req.traceContext);
-          return res.json({ success: true });
-        }
-        try {
-          const parts = [address?.flatNo, address?.buildingName, address?.streetAddress, address?.city, address?.state, address?.pincode].filter(Boolean);
-          const coords = await geocodeAddress(parts.join(', '), req.traceContext);
-          destLat = coords.latitude;
-          destLng = coords.longitude;
-          // Cache geocoded coords on order so we never geocode again
-          firestoreUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
-        } catch (geoErr) {
-          req.log?.warn({ err: geoErr.message }, 'Geocode failed — skipping ETA');
-          await updateOrder(orderId, firestoreUpdate, req.traceContext);
-          return res.json({ success: true });
+        if (process.env.GOOGLE_MAPS_API_KEY) {
+          try {
+            const parts = [address?.flatNo, address?.buildingName, address?.streetAddress, address?.city, address?.state, address?.pincode].filter(Boolean);
+            if (parts.length) {
+              const coords = await geocodeAddress(parts.join(', '), req.traceContext);
+              destLat = coords.latitude;
+              destLng = coords.longitude;
+              firestoreUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
+            }
+          } catch (geoErr) {
+            req.log?.warn({ err: geoErr.message }, 'Geocode failed — ETA skipped');
+          }
         }
       } else {
         firestoreUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
       }
     }
 
-    // Call Directions API for live ETA
-    let etaString = null;
-    let etaMinutes = null;
-
-    if (process.env.GOOGLE_MAPS_API_KEY) {
+    // Call Directions API if we have both origin and destination
+    if (destLat && destLng && process.env.GOOGLE_MAPS_API_KEY) {
       try {
         const { seconds } = await getDirectionsETA(latitude, longitude, destLat, destLng, req.traceContext);
         etaString = formatEtaString(seconds);
         etaMinutes = Math.ceil(seconds / 60);
       } catch (mapsErr) {
-        req.log?.warn({ err: mapsErr.message }, 'Directions API failed — skipping ETA update');
+        req.log?.warn({ err: mapsErr.message }, 'Directions API failed — ETA skipped');
       }
     }
 
-    // Write ETA + location to Realtime DB (live tracking)
+    // Always write to Realtime DB for live tracking (ETA may be null if Maps unavailable)
     writeLiveOrder(orderId, { status: 'out_for_delivery', eta: etaString, etaMinutes, latitude, longitude })
       .catch(err => req.log?.warn({ err: err.message }, 'RTDB writeLiveOrder failed (non-fatal)'));
 
