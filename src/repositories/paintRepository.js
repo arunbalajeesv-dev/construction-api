@@ -21,16 +21,13 @@ async function listAllPaintPricing() {
   return snap.docs.map(d => ({ id: d.id, ...d.data() }));
 }
 
-async function getShadesByBrand(brandSlug, searchQuery) {
-  const snap = await db
-    .collection('shades').doc(brandSlug)
-    .collection('colours')
-    .where('active', '==', true)
-    .orderBy('code')
-    .limit(200)
-    .get();
+async function getShadesByBrand(brandSlug, searchQuery, includeInactive = false) {
+  let query = db.collection('shades').doc(brandSlug).collection('colours').limit(200);
+  if (!includeInactive) query = query.where('active', '==', true);
+  const snap = await query.get();
 
   let shades = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  shades.sort((a, b) => a.code.localeCompare(b.code));
 
   if (searchQuery) {
     const q = searchQuery.toLowerCase();

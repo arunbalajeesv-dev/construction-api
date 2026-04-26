@@ -105,7 +105,7 @@ router.post('/drivers/:driverId/set-pin', setDriverPin);
 // GET /admin/shades/:brandSlug — list all (including inactive)
 router.get('/shades/:brandSlug', async (req, res) => {
   try {
-    const shades = await getShadesByBrand(req.params.brandSlug, null);
+    const shades = await getShadesByBrand(req.params.brandSlug, null, true);
     res.json({ success: true, shades, total: shades.length });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
