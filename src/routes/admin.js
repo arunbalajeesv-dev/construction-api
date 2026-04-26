@@ -1,6 +1,10 @@
 const express = require('express');
 const axios = require('axios');
 const router = express.Router();
+const {
+  getPaintPricing, setPaintPricing, listAllPaintPricing,
+  getShadesByBrand, addShade, updateShade, getShadeByCode, VALID_TIERS, VALID_SIZES,
+} = require('../repositories/paintRepository');
 const { getGlobalReport, resetGlobal } = require('../middleware/firestoreTracker');
 const {
   listOrders,
@@ -96,6 +100,113 @@ router.get('/drivers', listDrivers);
 router.post('/drivers', createDriver);
 router.delete('/drivers/:driverId', removeDriver);
 router.post('/drivers/:driverId/set-pin', setDriverPin);
+
+// ── Shade Management ─────────────────────────────────────────────
+// GET /admin/shades/:brandSlug — list all (including inactive)
+router.get('/shades/:brandSlug', async (req, res) => {
+  try {
+    const shades = await getShadesByBrand(req.params.brandSlug, null);
+    res.json({ success: true, shades, total: shades.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
+// POST /admin/shades/:brandSlug — add shade
+router.post('/shades/:brandSlug', async (req, res) => {
+  try {
+    const { brandSlug } = req.params;
+    const { code, name, tier } = req.body;
+    if (!code || !name || !tier) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'code, name, and tier are required' });
+    }
+    if (!VALID_TIERS.includes(tier)) {
+      return res.status(400).json({ success: false, error: 'INVALID_PARAM', message: `tier must be one of: ${VALID_TIERS.join(', ')}` });
+    }
+    const existing = await getShadeByCode(brandSlug, code);
+    if (existing) {
+      return res.status(409).json({ success: false, error: 'DUPLICATE_CODE', message: `Shade code '${code}' already exists` });
+    }
+    const shade = await addShade(brandSlug, { code, name, tier });
+    res.status(201).json({ success: true, shade });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
+// PUT /admin/shades/:brandSlug/:shadeId — update shade
+router.put('/shades/:brandSlug/:shadeId', async (req, res) => {
+  try {
+    const { brandSlug, shadeId } = req.params;
+    const { code, name, tier, active } = req.body;
+    if (tier !== undefined && !VALID_TIERS.includes(tier)) {
+      return res.status(400).json({ success: false, error: 'INVALID_PARAM', message: `tier must be one of: ${VALID_TIERS.join(', ')}` });
+    }
+    const updates = {};
+    if (code !== undefined) updates.code = code;
+    if (name !== undefined) updates.name = name;
+    if (tier !== undefined) updates.tier = tier;
+    if (active !== undefined) updates.active = active;
+    await updateShade(brandSlug, shadeId, updates);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
+// DELETE /admin/shades/:brandSlug/:shadeId — soft delete
+router.delete('/shades/:brandSlug/:shadeId', async (req, res) => {
+  try {
+    await updateShade(req.params.brandSlug, req.params.shadeId, { active: false });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
+// ── Paint Tier Pricing ────────────────────────────────────────────
+// GET /admin/paint-pricing — list all products with pricing
+router.get('/paint-pricing', async (req, res) => {
+  try {
+    const all = await listAllPaintPricing();
+    res.json({
+      success: true,
+      products: all.map(p => ({
+        productId: p.id,
+        productName: p.productName,
+        brandSlug: p.brandSlug,
+        tiersConfigured: Object.keys(p.tiers || {}),
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
+
+// POST /admin/paint-pricing/:productId — set tier pricing
+router.post('/paint-pricing/:productId', async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { productName, brandSlug, tiers } = req.body;
+    if (!productName || !brandSlug || !tiers) {
+      return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'productName, brandSlug, and tiers are required' });
+    }
+    for (const tier of VALID_TIERS) {
+      if (!tiers[tier]) {
+        return res.status(400).json({ success: false, error: 'INVALID_PARAM', message: `Missing tier: ${tier}` });
+      }
+      for (const size of VALID_SIZES) {
+        if (tiers[tier][size] === undefined) {
+          return res.status(400).json({ success: false, error: 'INVALID_PARAM', message: `Missing price for ${tier}/${size}` });
+        }
+      }
+    }
+    await setPaintPricing(productId, { productName, brandSlug, tiers, updatedAt: new Date().toISOString() });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+});
 
 // Firestore usage profiling
 router.get('/firestore-usage', (req, res) => {

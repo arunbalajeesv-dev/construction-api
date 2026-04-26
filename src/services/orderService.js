@@ -56,21 +56,30 @@ async function createOrder({ userId, addressId, paymentType }, traceContext, log
       }
     }
 
-    const totalWithoutGST = parseFloat((product.price * cartItem.quantity).toFixed(2));
+    const unitPrice = cartItem.price != null ? cartItem.price : product.price;
+    const totalWithoutGST = parseFloat((unitPrice * cartItem.quantity).toFixed(2));
     const gstAmount = parseFloat((totalWithoutGST * product.gst_percentage / 100).toFixed(2));
     const grandTotal = parseFloat((totalWithoutGST + gstAmount).toFixed(2));
 
-    lineItems.push({
+    const lineItem = {
       productId: cartItem.productId,
       name: product.name,
       quantity: cartItem.quantity,
       unit: product.unit,
-      unitPrice: product.price,
+      unitPrice,
       totalWithoutGST,
       gstRate: product.gst_percentage,
       gstAmount,
-      grandTotal
-    });
+      grandTotal,
+    };
+
+    if (cartItem.shadeCode) {
+      lineItem.shadeCode = cartItem.shadeCode;
+      lineItem.shadeName = cartItem.shadeName || null;
+      lineItem.shadeTier = cartItem.shadeTier || null;
+    }
+
+    lineItems.push(lineItem);
   }));
 
   if (stockIssues.length > 0) {

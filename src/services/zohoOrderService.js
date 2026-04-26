@@ -15,7 +15,8 @@ async function createZohoSalesOrder(zohoContactId, lineItems, shippingAddress, d
       line_items: lineItems.map(item => ({
         item_id: item.productId,
         quantity: item.quantity,
-        rate: item.unitPrice
+        rate: item.unitPrice,
+        ...(item.shadeCode ? { description: `Shade: ${item.shadeCode} - ${item.shadeName || ''} (${item.shadeTier || ''})` } : {}),
       })),
       shipping_charge: deliveryCharge || 0,
       shipping_address: {

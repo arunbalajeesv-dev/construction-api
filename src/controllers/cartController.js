@@ -28,11 +28,12 @@ async function setDeliveryCharge(req, res) {
 
 async function addToCart(req, res) {
   try {
-    const { userId, productId, quantity } = req.body;
+    const { userId, productId, quantity, shadeCode, shadeName, shadeTier, price } = req.body;
     if (!userId || !productId || !quantity) {
       return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'userId, productId, and quantity are required' });
     }
-    const result = await cartService.addToCart(userId, productId, parseInt(quantity));
+    const shadeInfo = shadeCode ? { shadeCode, shadeName: shadeName || null, shadeTier: shadeTier || null, price: price != null ? Number(price) : undefined } : null;
+    const result = await cartService.addToCart(userId, productId, parseInt(quantity), shadeInfo);
     res.json({ success: true, data: result });
   } catch (err) {
     const isStockError = /out of stock|units available/i.test(err.message);

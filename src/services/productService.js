@@ -126,7 +126,8 @@ async function getAllProducts(category = null, traceContext = null) {
       image: groupImageUrl,
       imageUrl: groupImageUrl,
       fallbackImage: buildImage(group.group_name),
-      featured: !!(cache.imageMap[`featured_${group.group_id}`])
+      featured: !!(cache.imageMap[`featured_${group.group_id}`]),
+      shadeBrand: firstVariantItem?.custom_field_hash?.cf_shade_brand || null,
     };
   });
 
@@ -152,7 +153,8 @@ async function getAllProducts(category = null, traceContext = null) {
         image: itemImageUrl,
         imageUrl: itemImageUrl,
         fallbackImage: buildImage(item.name),
-        featured: !!(cache.imageMap[`featured_${item.item_id}`] ?? zohoFeatured)
+        featured: !!(cache.imageMap[`featured_${item.item_id}`] ?? zohoFeatured),
+        shadeBrand: item.custom_field_hash?.cf_shade_brand || null,
       };
     });
 
