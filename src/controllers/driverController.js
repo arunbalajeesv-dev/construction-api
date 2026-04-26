@@ -2,6 +2,7 @@ const multer = require('multer');
 const bcrypt = require('bcrypt');
 const { getOrderById, updateOrder, getAddressById, updateVehicle, updateDriver, getDriverByPhone, getDriverById, getVehicleById, getOrdersByDriver, createHandover, getHandoversByDriver, getAllHandoversForDriver } = require('../services/firestoreService');
 const { getETA, geocodeAddress, getDirectionsETA, formatEtaString } = require('../services/googleMapsService');
+const { writeLiveOrder, updateLiveOrderStatus, deleteLiveOrder } = require('../services/realtimeDBService');
 const { uploadToFirebase } = require('../services/storageService');
 const { updateZohoShipment } = require('../services/zohoOrderService');
 const { formatTimestamps } = require('../utils/formatDoc');
@@ -65,6 +66,10 @@ const loadingComplete = async (req, res) => {
       status: 'out_for_delivery',
       loadingCompleteAt: new Date().toISOString()
     }, req.traceContext);
+
+    writeLiveOrder(orderId, { status: 'out_for_delivery', eta: null, etaMinutes: null, latitude: null, longitude: null })
+      .catch(err => req.log?.warn({ err: err.message }, 'RTDB writeLiveOrder failed (non-fatal)'));
+
     res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
@@ -87,12 +92,12 @@ const updateDriverLocation = async (req, res) => {
       return res.status(403).json({ success: false, error: 'FORBIDDEN', message: 'This order is not assigned to you' });
     }
 
-    // Always persist driver location
-    const locationUpdate = { driverLocation: { latitude, longitude } };
+    // Firestore only keeps driverLocation as a permanent record
+    const firestoreUpdate = { driverLocation: { latitude, longitude } };
 
     // Only compute ETA when order is out_for_delivery
     if (order.status !== 'out_for_delivery') {
-      await updateOrder(orderId, locationUpdate, req.traceContext);
+      await updateOrder(orderId, firestoreUpdate, req.traceContext);
       return res.json({ success: true });
     }
 
@@ -111,7 +116,7 @@ const updateDriverLocation = async (req, res) => {
       // Geocode if address has no coordinates
       if (!destLat || !destLng) {
         if (!process.env.GOOGLE_MAPS_API_KEY) {
-          await updateOrder(orderId, locationUpdate, req.traceContext);
+          await updateOrder(orderId, firestoreUpdate, req.traceContext);
           return res.json({ success: true });
         }
         try {
@@ -119,15 +124,15 @@ const updateDriverLocation = async (req, res) => {
           const coords = await geocodeAddress(parts.join(', '), req.traceContext);
           destLat = coords.latitude;
           destLng = coords.longitude;
-          // Cache so we never geocode again
-          locationUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
+          // Cache geocoded coords on order so we never geocode again
+          firestoreUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
         } catch (geoErr) {
           req.log?.warn({ err: geoErr.message }, 'Geocode failed — skipping ETA');
-          await updateOrder(orderId, locationUpdate, req.traceContext);
+          await updateOrder(orderId, firestoreUpdate, req.traceContext);
           return res.json({ success: true });
         }
       } else {
-        locationUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
+        firestoreUpdate.deliveryCoordinates = { latitude: destLat, longitude: destLng };
       }
     }
 
@@ -140,21 +145,22 @@ const updateDriverLocation = async (req, res) => {
         const { seconds } = await getDirectionsETA(latitude, longitude, destLat, destLng, req.traceContext);
         etaString = formatEtaString(seconds);
         etaMinutes = Math.ceil(seconds / 60);
-        locationUpdate.eta = etaString;
-        locationUpdate.etaMinutes = etaMinutes;
-        locationUpdate.etaUpdatedAt = new Date().toISOString();
       } catch (mapsErr) {
         req.log?.warn({ err: mapsErr.message }, 'Directions API failed — skipping ETA update');
       }
     }
 
-    await updateOrder(orderId, locationUpdate, req.traceContext);
+    // Write ETA + location to Realtime DB (live tracking)
+    writeLiveOrder(orderId, { status: 'out_for_delivery', eta: etaString, etaMinutes, latitude, longitude })
+      .catch(err => req.log?.warn({ err: err.message }, 'RTDB writeLiveOrder failed (non-fatal)'));
+
+    // Write only driverLocation (and cached coords) to Firestore — permanent record
+    await updateOrder(orderId, firestoreUpdate, req.traceContext);
 
     return res.json({
       success: true,
       eta: etaString,
       etaMinutes,
-      etaUpdatedAt: locationUpdate.etaUpdatedAt || null,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
@@ -200,6 +206,10 @@ const arrived = async (req, res) => {
       status: 'arrived',
       arrivedAt: new Date().toISOString()
     }, req.traceContext);
+
+    updateLiveOrderStatus(orderId, 'arrived')
+      .catch(err => req.log?.warn({ err: err.message }, 'RTDB updateLiveOrderStatus failed (non-fatal)'));
+
     res.json({ success: true, data: { order: formatTimestamps(updated) } });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
@@ -265,6 +275,10 @@ const completeDelivery = [
         deliveryPhotoUrl,
         otpVerified: true
       }, req.traceContext);
+
+      updateLiveOrderStatus(orderId, 'delivered')
+        .then(() => setTimeout(() => deleteLiveOrder(orderId).catch(() => {}), 60000))
+        .catch(err => req.log?.warn({ err: err.message }, 'RTDB delivered update failed (non-fatal)'));
 
       if (order.zoho_so_id) {
         updateZohoShipment(order.zoho_so_id, req.traceContext).catch(err => {

@@ -26,6 +26,7 @@ const schema = z.object({
   JWT_SECRET: z.string().min(6, 'JWT_SECRET must be at least 6 characters'),
 
   // Optional
+  FIREBASE_DATABASE_URL: z.string().url().optional(),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
   WAREHOUSE_LAT: z.coerce.number().optional(),
   WAREHOUSE_LNG: z.coerce.number().optional(),
