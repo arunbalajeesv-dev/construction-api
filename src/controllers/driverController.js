@@ -262,7 +262,15 @@ const completeDelivery = [
       }
 
       if (!req.file) return res.status(400).json({ success: false, error: 'MISSING_PARAM', message: 'photo is required' });
-      const deliveryPhotoUrl = await uploadToFirebase(req.file.buffer, req.file.mimetype, 'deliveries');
+      let deliveryPhotoUrl;
+      try {
+        deliveryPhotoUrl = await uploadToFirebase(req.file.buffer, req.file.mimetype, 'deliveries');
+      } catch (uploadError) {
+        console.error('[Storage Error] Full error:', uploadError);
+        console.error('[Storage Error] Message:', uploadError.message);
+        console.error('[Storage Error] Code:', uploadError.code);
+        throw uploadError;
+      }
 
       const updated = await updateOrder(orderId, {
         status: 'delivered',
