@@ -57,20 +57,36 @@ async function createOrder({ userId, addressId, paymentType }, traceContext, log
     }
 
     const unitPrice = cartItem.price != null ? cartItem.price : product.price;
-    const totalWithoutGST = parseFloat((unitPrice * cartItem.quantity).toFixed(2));
-    const gstAmount = parseFloat((totalWithoutGST * product.gst_percentage / 100).toFixed(2));
-    const grandTotal = parseFloat((totalWithoutGST + gstAmount).toFixed(2));
+    const gstRate = product.gst_percentage || 18;
+    const qty = cartItem.quantity;
+
+    let totalWithoutGST, gstAmount, grandTotal;
+    if (cartItem.shadeTier) {
+      // Paint tier prices are GST-inclusive — back-calculate base price
+      const divisor = 1 + (gstRate / 100);
+      const basePrice = parseFloat((unitPrice / divisor).toFixed(2));
+      totalWithoutGST = parseFloat((basePrice * qty).toFixed(2));
+      gstAmount = parseFloat(((unitPrice * qty) - totalWithoutGST).toFixed(2));
+      grandTotal = parseFloat((unitPrice * qty).toFixed(2));
+    } else {
+      totalWithoutGST = parseFloat((unitPrice * qty).toFixed(2));
+      gstAmount = parseFloat((totalWithoutGST * gstRate / 100).toFixed(2));
+      grandTotal = parseFloat((totalWithoutGST + gstAmount).toFixed(2));
+    }
 
     const lineItem = {
       productId: cartItem.productId,
+      zohoItemId: cartItem.zohoItemId || cartItem.productId,
+      variantId: cartItem.variantId || null,
       name: product.name,
-      quantity: cartItem.quantity,
+      quantity: qty,
       unit: product.unit,
       unitPrice,
       totalWithoutGST,
-      gstRate: product.gst_percentage,
+      gstRate,
       gstAmount,
       grandTotal,
+      cartItemId: cartItem.cartItemId || null,
     };
 
     if (cartItem.shadeCode) {
