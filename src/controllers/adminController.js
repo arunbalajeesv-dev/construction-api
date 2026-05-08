@@ -709,7 +709,7 @@ const listCodHistory = async (req, res) => {
     const [allOrders, handovers] = await Promise.all([
       orderId
         ? getOrderById(orderId, req.traceContext).then(order => (order ? [order] : []))
-        : findOrders({ status: 'delivered', paymentType: 'COD', driverId, date, limit }, req.traceContext),
+        : findOrders({ status: 'delivered', driverId, date, limit }, req.traceContext).then(orders => orders.filter(o => o.paymentType === 'COD')),
       getAllHandovers(status || null, req.traceContext, { driverId, date, limit })
     ]);
 
