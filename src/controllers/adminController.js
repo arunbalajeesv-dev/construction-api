@@ -719,6 +719,7 @@ const listCodHistory = async (req, res) => {
       .map(o => ({
         type: 'order',
         orderId: o.orderId,
+        customerName: o.customerName || o.customer?.name || null,
         driverName: o.driverName || '',
         driverId: o.driverId || '',
         amount: o.codAmountCollected || o.codAmount || 0,
