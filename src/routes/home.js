@@ -4,6 +4,7 @@ const router = express.Router();
 const { getAllProducts } = require('../services/productService');
 const { cacheFor } = require('../cache/middleware');
 const { CACHE_TTL_CATALOGUE_S } = require('../constants');
+const { dbOp } = require('../utils/dbOp');
 
 function toCategoryId(name) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
@@ -14,8 +15,18 @@ router.get('/', cacheFor(CACHE_TTL_CATALOGUE_S, () => 'home:data'), async (req, 
   try {
     const [products, catSnap, bannerSnap] = await Promise.all([
       getAllProducts(null, req.traceContext),
-      admin.firestore().collection('categories').get(),
-      admin.firestore().collection('banners').orderBy('sortOrder', 'asc').get()
+      dbOp(
+        'categories.list',
+        () => admin.firestore().collection('categories').get(),
+        req.traceContext,
+        { 'db.collection': 'categories' },
+      ),
+      dbOp(
+        'banners.list',
+        () => admin.firestore().collection('banners').orderBy('sortOrder', 'asc').get(),
+        req.traceContext,
+        { 'db.collection': 'banners' },
+      ),
     ]);
 
     const categoryImages = {};

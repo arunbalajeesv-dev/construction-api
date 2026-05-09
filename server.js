@@ -6,6 +6,48 @@ const env = require('./src/config/env');
 const { startTelemetry, shutdownTelemetry } = require('./src/observability/otel');
 const logger = require('./src/utils/logger');
 
+// Allowlist of headers worth logging in DEBUG_PAYLOADS mode. Everything
+// else (helmet boilerplate, accept-encoding, host, user-agent, etc.) is
+// dropped to keep log lines scannable. Tokens are redacted, not logged.
+const REQUEST_HEADER_ALLOW = new Set([
+  'traceparent',
+  'x-trace-id',
+  'authorization',
+  'content-type',
+  'x-idempotency-key',
+  'x-user-id',
+  'x-app-version',
+]);
+
+const RESPONSE_HEADER_ALLOW = new Set([
+  'traceparent',
+  'x-trace-id',
+  'content-type',
+  'access-control-allow-origin',
+  'x-firestore-reads',
+  'x-firestore-writes',
+]);
+
+const REDACTED_HEADERS = new Set([
+  'authorization',
+  'cookie',
+  'set-cookie',
+  'x-firebase-appcheck',
+  'x-recaptcha-token',
+  'x-api-key',
+]);
+
+function pickHeaders(headers, allowlist) {
+  if (!headers) return undefined;
+  const out = {};
+  for (const [k, v] of Object.entries(headers)) {
+    const key = k.toLowerCase();
+    if (!allowlist.has(key)) continue;
+    out[k] = REDACTED_HEADERS.has(key) ? '***REDACTED***' : v;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function createApp() {
   // Require instrumented modules only after telemetry has started.
   const express = require('express');
@@ -56,6 +98,8 @@ function createApp() {
       if (debugPayloads) {
         if (req.body && Object.keys(req.body).length > 0) props.reqBody = req.body;
         if (res._debugPayload !== undefined) props.resBody = res._debugPayload;
+        props.reqHeaders = pickHeaders(req.headers, REQUEST_HEADER_ALLOW);
+        props.resHeaders = pickHeaders(res.getHeaders(), RESPONSE_HEADER_ALLOW);
       }
       return props;
     },
