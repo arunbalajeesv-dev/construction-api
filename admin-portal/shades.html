@@ -74,6 +74,13 @@
   .filter-tab { background:#f3f4f6; color:var(--muted); border:1px solid var(--border) !important; }
   .filter-tab.active { background:var(--navy); color:#fff; border-color:var(--navy) !important; }
   .swatch { width:24px; height:24px; border-radius:50%; border:1px solid rgba(0,0,0,0.12); display:inline-block; flex-shrink:0; }
+  .shade-scroll-wrap { max-height:500px; overflow-y:auto; border:1px solid var(--border); border-radius:8px; }
+  .shade-scroll-wrap thead th { position:sticky; top:0; background:#f9fafb; z-index:1; }
+  .shade-count { font-size:13px; color:var(--muted); margin-bottom:10px; }
+  .shade-count strong { color:var(--text); }
+  .pagination { display:flex; align-items:center; gap:10px; margin-top:12px; font-size:13px; }
+  .pagination button { padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:#fff; cursor:pointer; font-size:13px; }
+  .pagination button:disabled { opacity:0.4; cursor:default; }
   .toast { position:fixed; bottom:24px; right:24px; background:var(--navy); color:#fff; padding:12px 20px; border-radius:10px; font-size:14px; font-weight:500; z-index:9999; display:none; }
   .toast.show { display:block; animation:slidein 0.2s ease; }
   @keyframes slidein { from { transform:translateY(10px); opacity:0; } to { transform:translateY(0); opacity:1; } }
@@ -111,69 +118,7 @@
 
   <div class="content">
 
-    <!-- SECTION A: Shade Catalogue -->
-    <div class="section">
-      <div class="section-title">Shade Catalogue — Asian Paints</div>
-
-      <div class="stats">
-        <div class="stat"><strong id="stat-total">—</strong>Total Active</div>
-        <div class="stat"><strong id="stat-light">—</strong>Light</div>
-        <div class="stat"><strong id="stat-mid">—</strong>Mid</div>
-        <div class="stat"><strong id="stat-dark">—</strong>Dark</div>
-        <div class="stat"><strong id="stat-inactive">—</strong>Inactive</div>
-      </div>
-
-      <div class="form-row" style="margin-bottom:12px;">
-        <div class="form-group">
-          <label>Search</label>
-          <input type="text" id="search-input" placeholder="Code, name, or hex…" oninput="filterShades()" style="width:240px;">
-        </div>
-        <div style="display:flex;gap:6px;align-items:flex-end;">
-          <button class="btn btn-sm filter-tab active" id="tab-active" onclick="setTab('active')">Active</button>
-          <button class="btn btn-sm filter-tab" id="tab-inactive" onclick="setTab('inactive')">Inactive</button>
-          <button class="btn btn-sm filter-tab" id="tab-all" onclick="setTab('all')">All</button>
-        </div>
-        <div style="flex:1"></div>
-        <div class="form-group">
-          <label>Code</label>
-          <input type="text" id="new-code" placeholder="e.g. 7124" style="width:90px;">
-        </div>
-        <div class="form-group">
-          <label>Name</label>
-          <input type="text" id="new-name" placeholder="e.g. Sonnet" style="width:150px;">
-        </div>
-        <div class="form-group">
-          <label>Tier</label>
-          <select id="new-tier">
-            <option value="light">Light</option>
-            <option value="mid">Mid</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
-        <div class="form-group">
-          <label>Hex colour</label>
-          <div style="display:flex;gap:6px;align-items:center;">
-            <input type="text" id="new-hex" placeholder="#F7E2E0" style="width:100px;" oninput="updateHexPreview()">
-            <div id="hex-preview" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:#fff;flex-shrink:0;"></div>
-          </div>
-        </div>
-        <button class="btn btn-primary" onclick="addShade()">+ Add Shade</button>
-      </div>
-
-      <div id="shades-loading" class="loading">Loading shades…</div>
-      <table id="shades-table" style="display:none">
-        <thead>
-          <tr>
-            <th style="width:36px"></th>
-            <th>Code</th><th>Name</th><th>Tier</th><th>Status</th><th>Actions</th>
-          </tr>
-        </thead>
-        <tbody id="shades-body"></tbody>
-      </table>
-      <div id="shades-empty" class="empty" style="display:none">No shades found.</div>
-    </div>
-
-    <!-- SECTION B: Product Tier Pricing -->
+    <!-- SECTION A: Product Tier Pricing — always visible at top -->
     <div class="section">
       <div class="section-title">Product Tier Pricing</div>
 
@@ -214,6 +159,81 @@
       </div>
     </div>
 
+    <hr style="margin:32px 0;border:none;border-top:2px solid #e5e7eb;">
+
+    <!-- SECTION B: Shade Catalogue — scrollable -->
+    <div class="section">
+      <div class="section-title">🎨 Shade Catalogue — Asian Paints</div>
+
+      <!-- Count summary -->
+      <div class="shade-count" id="shade-count">Loading…</div>
+
+      <!-- Search + filter tabs -->
+      <div class="form-row" style="margin-bottom:12px;">
+        <div class="form-group">
+          <label>Search</label>
+          <input type="text" id="search-input" placeholder="Code, name, or hex…" oninput="filterShades()" style="width:240px;">
+        </div>
+        <div style="display:flex;gap:6px;align-items:flex-end;">
+          <button class="btn btn-sm filter-tab active" id="tab-active" onclick="setTab('active')">Active</button>
+          <button class="btn btn-sm filter-tab" id="tab-inactive" onclick="setTab('inactive')">Inactive</button>
+          <button class="btn btn-sm filter-tab" id="tab-all" onclick="setTab('all')">All</button>
+        </div>
+      </div>
+
+      <!-- Add shade form -->
+      <div class="form-row" style="margin-bottom:16px;">
+        <div class="form-group">
+          <label>Code</label>
+          <input type="text" id="new-code" placeholder="e.g. 7124" style="width:90px;">
+        </div>
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="new-name" placeholder="e.g. Sonnet" style="width:150px;">
+        </div>
+        <div class="form-group">
+          <label>Tier</label>
+          <select id="new-tier">
+            <option value="light">Light</option>
+            <option value="mid">Mid</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Hex colour</label>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <input type="text" id="new-hex" placeholder="#F7E2E0" style="width:100px;" oninput="updateHexPreview()">
+            <div id="hex-preview" style="width:28px;height:28px;border-radius:50%;border:1px solid var(--border);background:#fff;flex-shrink:0;"></div>
+          </div>
+        </div>
+        <button class="btn btn-primary" onclick="addShade()">+ Add Shade</button>
+      </div>
+
+      <!-- Loading state -->
+      <div id="shades-loading" class="loading">Loading shades…</div>
+
+      <!-- Scrollable table wrapper -->
+      <div id="shades-scroll-wrap" class="shade-scroll-wrap" style="display:none">
+        <table id="shades-table">
+          <thead>
+            <tr>
+              <th style="width:36px"></th>
+              <th>Code</th><th>Name</th><th>Tier</th><th>Status</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="shades-body"></tbody>
+        </table>
+      </div>
+      <div id="shades-empty" class="empty" style="display:none">No shades found.</div>
+
+      <!-- Pagination -->
+      <div class="pagination" id="pagination" style="display:none">
+        <button id="btn-prev" onclick="changePage(-1)" disabled>← Prev</button>
+        <span id="page-info"></span>
+        <button id="btn-next" onclick="changePage(1)">Next →</button>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -245,10 +265,14 @@ function toast(msg, ok = true) {
 // ── Shades ──────────────────────────────────────────────────────
 let allShades = [];
 let currentTab = 'active';
+let filteredShades = [];
+let currentPage = 0;
+const PAGE_SIZE = 50;
 
 async function loadShades() {
   document.getElementById('shades-loading').style.display = 'block';
-  document.getElementById('shades-table').style.display = 'none';
+  document.getElementById('shades-scroll-wrap').style.display = 'none';
+  document.getElementById('pagination').style.display = 'none';
   const data = await api('GET', '/admin/shades/asian-paints');
   allShades = data.shades || [];
   updateStats();
@@ -259,11 +283,14 @@ async function loadShades() {
 function updateStats() {
   const active = allShades.filter(s => s.active !== false);
   const inactive = allShades.filter(s => s.active === false);
-  document.getElementById('stat-total').textContent = active.length;
-  document.getElementById('stat-light').textContent = active.filter(s => s.tier === 'light').length;
-  document.getElementById('stat-mid').textContent   = active.filter(s => s.tier === 'mid').length;
-  document.getElementById('stat-dark').textContent  = active.filter(s => s.tier === 'dark').length;
-  document.getElementById('stat-inactive').textContent = inactive.length;
+  const light = active.filter(s => s.tier === 'light').length;
+  const mid   = active.filter(s => s.tier === 'mid').length;
+  const dark  = active.filter(s => s.tier === 'dark').length;
+  document.getElementById('shade-count').innerHTML =
+    `🎨 <strong>${active.length.toLocaleString()} shades</strong> &nbsp;·&nbsp; ` +
+    `${light.toLocaleString()} Light &nbsp;·&nbsp; ${mid.toLocaleString()} Mid &nbsp;·&nbsp; ${dark.toLocaleString()} Dark` +
+    `<br><span style="color:#3fb950;font-weight:600">${active.length.toLocaleString()} active</span>` +
+    (inactive.length ? ` &nbsp;·&nbsp; <span style="color:var(--muted)">${inactive.length} inactive</span>` : '');
 }
 
 function setTab(tab) {
@@ -280,46 +307,47 @@ function filterShades() {
   if (currentTab === 'active')   pool = allShades.filter(s => s.active !== false);
   if (currentTab === 'inactive') pool = allShades.filter(s => s.active === false);
 
-  const filtered = q
+  filteredShades = q
     ? pool.filter(s =>
         s.code.toLowerCase().includes(q) ||
         s.name.toLowerCase().includes(q) ||
         (s.hex || '').toLowerCase().includes(q)
       )
     : pool;
-  renderShades(filtered);
+
+  currentPage = 0;
+  renderPage();
 }
 
-function updateHexPreview() {
-  const val = document.getElementById('new-hex').value.trim();
-  const el = document.getElementById('hex-preview');
-  el.style.background = /^#[0-9A-Fa-f]{6}$/.test(val) ? val : '#fff';
+function changePage(delta) {
+  const totalPages = Math.ceil(filteredShades.length / PAGE_SIZE);
+  currentPage = Math.max(0, Math.min(currentPage + delta, totalPages - 1));
+  renderPage();
 }
 
-function tierBadge(tier) {
-  const map = { light: 'badge-light', mid: 'badge-mid', dark: 'badge-dark' };
-  const labels = { light: 'Light', mid: 'Mid', dark: 'Dark' };
-  return `<span class="badge ${map[tier] || ''}">${labels[tier] || tier}</span>`;
-}
-
-function renderShades(shades) {
-  const tbody = document.getElementById('shades-body');
-  const table = document.getElementById('shades-table');
+function renderPage() {
+  const wrap  = document.getElementById('shades-scroll-wrap');
   const empty = document.getElementById('shades-empty');
+  const pag   = document.getElementById('pagination');
 
-  if (!shades.length) {
-    table.style.display = 'none';
+  if (!filteredShades.length) {
+    wrap.style.display = 'none';
+    pag.style.display = 'none';
     empty.style.display = 'block';
     return;
   }
 
-  table.style.display = 'table';
   empty.style.display = 'none';
+  wrap.style.display = 'block';
 
-  tbody.innerHTML = shades.map(s => {
-    const hexEsc = (s.hex || '').replace(/'/g, "\\'");
+  const totalPages = Math.ceil(filteredShades.length / PAGE_SIZE);
+  const start = currentPage * PAGE_SIZE;
+  const page  = filteredShades.slice(start, start + PAGE_SIZE);
+
+  document.getElementById('shades-body').innerHTML = page.map(s => {
+    const hexEsc  = (s.hex || '').replace(/'/g, "\\'");
     const nameEsc = s.name.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-    const swatch = s.hex
+    const swatch  = s.hex
       ? `<span class="swatch" style="background:${s.hex}" title="${s.hex}"></span>`
       : `<span class="swatch" style="background:#f3f4f6"></span>`;
     return `
@@ -338,6 +366,32 @@ function renderShades(shades) {
       </td>
     </tr>`;
   }).join('');
+
+  // Scroll back to top of table on page change
+  wrap.scrollTop = 0;
+
+  // Pagination controls
+  if (totalPages <= 1) {
+    pag.style.display = 'none';
+  } else {
+    pag.style.display = 'flex';
+    document.getElementById('page-info').textContent =
+      `Page ${currentPage + 1} of ${totalPages}  (${filteredShades.length.toLocaleString()} shades)`;
+    document.getElementById('btn-prev').disabled = currentPage === 0;
+    document.getElementById('btn-next').disabled = currentPage >= totalPages - 1;
+  }
+}
+
+function updateHexPreview() {
+  const val = document.getElementById('new-hex').value.trim();
+  const el  = document.getElementById('hex-preview');
+  el.style.background = /^#[0-9A-Fa-f]{6}$/.test(val) ? val : '#fff';
+}
+
+function tierBadge(tier) {
+  const map    = { light: 'badge-light', mid: 'badge-mid', dark: 'badge-dark' };
+  const labels = { light: 'Light', mid: 'Mid', dark: 'Dark' };
+  return `<span class="badge ${map[tier] || ''}">${labels[tier] || tier}</span>`;
 }
 
 async function addShade() {
