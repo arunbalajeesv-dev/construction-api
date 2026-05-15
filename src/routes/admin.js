@@ -20,6 +20,7 @@ const {
   forceCompleteOrder,
   cancelOrder,
   getCustomerByPhoneNumber,
+  getCustomerByUserId,
   getCustomerOrders,
   markPacked,
   assignVehicle,
@@ -140,6 +141,7 @@ router.put('/products/:id/featured', async (req, res, next) => {
 // Customer lookup by phone (support panel)
 router.get('/customers/phone/:phone', getCustomerByPhoneNumber);
 router.get('/customers/:userId/orders', getCustomerOrders);
+router.get('/customers/:userId', getCustomerByUserId);
 
 // Vehicles
 router.get('/vehicles', listVehicles);
