@@ -147,3 +147,4 @@ postman/postman/*
 /.claude
 /.continue
 skills-lock.json
+*.dart_tool*
