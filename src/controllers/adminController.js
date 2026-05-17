@@ -819,6 +819,21 @@ const getCustomerByPhoneNumber = async (req, res) => {
   }
 };
 
+// GET /api/admin/customers/:userId
+const getCustomerByUserId = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (!userId || !userId.trim()) {
+      return res.status(400).json({ success: false, error: 'INVALID_USER_ID', message: 'userId is required' });
+    }
+    const customer = await getCustomer(userId.trim(), req.traceContext);
+    if (!customer) return res.status(404).json({ success: false, error: 'CUSTOMER_NOT_FOUND', message: 'No customer found with that userId' });
+    res.json({ success: true, data: { customer } });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
+  }
+};
+
 // GET /api/admin/customers/:userId/orders?limit=10
 const getCustomerOrders = async (req, res) => {
   try {
@@ -1289,6 +1304,7 @@ module.exports = {
   forceCompleteOrder,
   cancelOrder,
   getCustomerByPhoneNumber,
+  getCustomerByUserId,
   getCustomerOrders,
   assignVehicle,
   getPickingList,
