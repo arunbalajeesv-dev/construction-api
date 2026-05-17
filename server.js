@@ -48,6 +48,19 @@ function pickHeaders(headers, allowlist) {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+// Loki rejects streams with structured metadata > 64KB. Cap each payload field
+// well below that so headers + multiple fields still fit in one log line.
+const PAYLOAD_MAX_BYTES = 16 * 1024;
+
+function truncatePayload(value) {
+  if (value === undefined || value === null) return value;
+  const str = typeof value === 'string' ? value : JSON.stringify(value);
+  if (str === undefined) return value;
+  const size = Buffer.byteLength(str, 'utf8');
+  if (size <= PAYLOAD_MAX_BYTES) return value;
+  return `${str.slice(0, PAYLOAD_MAX_BYTES)}…[truncated ${size - PAYLOAD_MAX_BYTES}B of ${size}B]`;
+}
+
 function createApp() {
   // Require instrumented modules only after telemetry has started.
   const express = require('express');
@@ -96,8 +109,8 @@ function createApp() {
         props.span_id = spanCtx.spanId;
       }
       if (debugPayloads) {
-        if (req.body && Object.keys(req.body).length > 0) props.reqBody = req.body;
-        if (res._debugPayload !== undefined) props.resBody = res._debugPayload;
+        if (req.body && Object.keys(req.body).length > 0) props.reqBody = truncatePayload(req.body);
+        if (res._debugPayload !== undefined) props.resBody = truncatePayload(res._debugPayload);
         props.reqHeaders = pickHeaders(req.headers, REQUEST_HEADER_ALLOW);
         props.resHeaders = pickHeaders(res.getHeaders(), RESPONSE_HEADER_ALLOW);
       }
