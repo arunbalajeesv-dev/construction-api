@@ -4,6 +4,7 @@ const multer = require('multer');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const { invalidateProducts, invalidateOrder, invalidateAfterZohoMutation } = require('../cache/invalidate');
+const remoteConfig = require('../services/remoteConfigService');
 const {
   getPaintPricing, setPaintPricing, listAllPaintPricing,
   getShadesByBrand, addShade, updateShade, getShadeByCode, VALID_TIERS, VALID_SIZES,
@@ -282,9 +283,14 @@ router.post('/paint-pricing/:productId', async (req, res) => {
 
 // Manual cache invalidation — flush Zoho-derived caches (products, home, search, categories)
 // after editing items directly in Zoho so users see fresh data without waiting for TTL.
+// Multi-instance caveat: Redis keys are cleared globally, but per-instance in-memory caches
+// (productService, remoteConfig) only clear on the Cloud Run instance handling this request.
+// Other warm instances continue serving from their own in-memory state until TTL expires
+// (10 min default), after which they refill from Redis.
 router.post('/cache/invalidate-zoho', async (req, res) => {
   try {
     await invalidateAfterZohoMutation('manual', '/admin/cache/invalidate-zoho');
+    remoteConfig.clearCache();
     res.json({ success: true, message: 'Zoho caches cleared' });
   } catch (err) {
     res.status(500).json({ success: false, error: 'SERVER_ERROR', message: err.message });
